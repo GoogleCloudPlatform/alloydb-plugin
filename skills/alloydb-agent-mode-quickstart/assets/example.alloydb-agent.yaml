@@ -1,0 +1,128 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# =============================================================================
+# AlloyDB Agent Deployment Config Template (`./<name>.alloydb-agent.yaml`)
+#   Generated and maintained in the working directory by the agent during Step 1
+#   to drive `validate_config.py`, `deploy_infra.py`, and `deploy_agent.py`.
+#
+# Every key is REQUIRED or OPTIONAL; optional ones state the default used when
+# omitted.
+# =============================================================================
+
+# --- Top-level metadata (common & high-level) --------------------------------
+# REQUIRED. Deployment name (lowercase, hyphens, <=24 chars). Derives the
+# runtime SA agent-<name>@, Cloud Run service alloydb-agent-workspace-<name>,
+# and Coordinator engine name <name>_swarm_coordinator.
+name: "sales-analytics"
+
+# REQUIRED. Where every resource is created.
+project_id: "YOUR_GCP_PROJECT_ID"        # gcloud config get-value project
+region: "us-central1"
+
+# OPTIONAL (default: gemini-3.8-flash). Model used by the main agent and the
+# swarm coordinator.
+model: "gemini-3.8-flash"
+
+# OPTIONAL (default: none). Leading-hyphen suffix (e.g. "-dev", <=20 chars) for
+# the resources every deployment in this project SHARES — PSC endpoint, DNS
+# zone, Infra Manager deployment — so a throwaway stack can stand beside a real
+# one.
+name_suffix: ""
+
+# Private path from Agent Engine into VPC (AlloyDB Agent Pool & internal Cloud
+# Run). `network` and `subnet` are REQUIRED; `network_attachment` is OPTIONAL
+# (default: "agents-psc-attachment<name_suffix>", created in Step 2 if missing).
+vpc:
+  network: "agents-vpc"
+  subnet: "agents-subnet"
+  network_attachment: "agents-psc-attachment"
+
+# --- Target AlloyDB Agent Pool (REQUIRED) ------------------------------------
+# Provisioned in Step P or pre-existing. Deploy scripts automatically resolve
+# the pool's private *.alloydb.goog MCP endpoint from `cluster` and `instance`.
+database:
+  # REQUIRED. AlloyDB cluster, Agent Pool instance, and PostgreSQL database
+  # name (in the same project_id and region configured at the top of this file).
+  cluster: "my-cluster"
+  instance: "my-agent-pool"
+  database: "sales"
+
+# --- Vertex AI Agent Engine runtimes (REQUIRED) ------------------------------
+agent_engine:
+  # REQUIRED. The main data agent.
+  agent:
+    # OPTIONAL (default: "<Name> Agent"). Human-readable display name in Agent
+    # Engine (and in Gemini Enterprise when deploying a simple agent). Must NOT
+    # contain "Coordinator".
+    display_name: "Sales Analytics Agent"
+
+    # OPTIONAL (default: none). Plain text added verbatim to the main agent's
+    # prompt (and the coordinator's, unless it sets its own): definitions,
+    # terminology, caveats, even example SQL. Use `|-` to keep line breaks.
+    context: |-
+      Acme Retail tracks orders, line items, products, and customers across
+      three regions (NA, EMEA, APAC). Fiscal year runs Feb 1 – Jan 31.
+      Net revenue excludes cancelled and returned order lines.
+
+      VERIFIED QUERIES (run via execute_sql_read_only, replacing :param with a
+      quoted literal):
+      -- monthly_net_revenue: net revenue by month and product category
+      SELECT to_char(date_trunc('month', o.order_date), 'YYYY-MM') AS month,
+             p.category,
+             round(sum(l.quantity * l.unit_price), 2) AS net_revenue
+      FROM order_lines l
+      JOIN orders o USING (order_id)
+      JOIN products p USING (product_id)
+      WHERE o.status = 'COMPLETED'
+        AND o.order_date BETWEEN :start_date::date AND :end_date::date
+      GROUP BY 1, 2
+      ORDER BY 1, 3 DESC;
+
+    # OPTIONAL (default: false). When `true`, deploys the Cloud Run Agent
+    # Workspace service, which gives every agent session its own private,
+    # writable PostgreSQL scratch database (provision_database / execute_sql /
+    # get_schema / release_database).
+    workspace: true
+
+  # OPTIONAL. Include this block to deploy the Swarm Coordinator as a second
+  # Agent Engine runtime that fans one question across many parallel sessions
+  # of the main agent. Omit (or delete) this block to deploy only the main
+  # agent. Everything inside defaults from `agent`.
+  coordinator:
+    # OPTIONAL (default: "<agent.display_name> Swarm Coordinator"). SHOULD
+    # contain "Coordinator".
+    display_name: "Sales Analytics Swarm Coordinator"
+
+    # OPTIONAL (default: inherits `agent.context` when empty/omitted). Plain
+    # text for the coordinator's prompt only, if it needs different context
+    # from the main agent.
+    context: ""
+
+# --- Gemini Enterprise registration (OPTIONAL) -------------------------------
+gemini_enterprise:
+  # OPTIONAL. Target Gemini Enterprise app ID in the GLOBAL location. When set,
+  # `deploy_agent.py register` registers the deployed agent into this app.
+  app_id: ""
+
+  # OPTIONAL. Shown to users in Gemini Enterprise chat and used by the
+  # assistant router to dispatch questions to this agent.
+  description: |-
+    Ask about sales performance — revenue, orders, customers and categories —
+    or launch a swarm of parallel agents to investigate a trend.
+
+    Try asking:
+    • "What were the monthly revenue trends by category this year?"
+    • "Who are our top customers by lifetime spend?"
+    • "Investigate the revenue dip with 10 agents"
