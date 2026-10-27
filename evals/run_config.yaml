@@ -17,16 +17,16 @@ dataset_format: gemini-cli-format
 
 orchestrator: geminicli
 model_config: /workspace/evals/model_config.yaml
-simulated_user_model_config: /workspace/evals/gemini_2.5_pro_model.yaml
+simulated_user_model_config: /workspace/evals/gemini_3.8_flash_model.yaml
 
 scorers:
   # Qualitative (Judge-based)
   goal_completion:
-    model_config: /workspace/evals/gemini_2.5_pro_model.yaml
+    model_config: /workspace/evals/gemini_3.8_flash_model.yaml
   behavioral_metrics:
-    model_config: /workspace/evals/gemini_2.5_pro_model.yaml
+    model_config: /workspace/evals/gemini_3.8_flash_model.yaml
   skills_best_practices:
-    model_config: /workspace/evals/gemini_2.5_pro_model.yaml
+    model_config: /workspace/evals/gemini_3.8_flash_model.yaml
     skills_dir: /workspace/alloydb/skills
 
   # Performance
