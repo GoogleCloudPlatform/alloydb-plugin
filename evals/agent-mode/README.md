@@ -19,7 +19,8 @@ When a pull request modifies `skills/alloydb-agent-mode-quickstart/**` or
 when the `ci:run-evals-agent-mode` label is applied to the PR.
 
 All per-run cloud resources are namespaced by pull request number (`pr<NUMBER>`)
-and automatically cleaned up by [`teardown.sh`](teardown.sh).
+and automatically cleaned up by [`teardown.sh`](teardown.sh). A new push to a
+PR cancels its older run and cleans up that run's resources before starting.
 
 ## Running Locally
 

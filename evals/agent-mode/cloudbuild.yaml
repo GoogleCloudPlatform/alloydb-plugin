@@ -13,8 +13,9 @@
 # limitations under the License.
 
 # The released EvalBench runs CUJ 1-3 one after another (about 2 hours), so
-# allow 4 hours: up to 3 hours for EvalBench and at least 1 hour for teardown.
-timeout: 14400s
+# allow 5 hours: up to 1 hour to clean up older runs, up to 3 hours for
+# EvalBench, and at least 1 hour for teardown.
+timeout: 18000s
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -87,6 +88,18 @@ steps:
         export CUJ2_NAME="cuj2-pr${_PR_NUMBER}"
         export CUJ3_NAME="cuj3-pr${_PR_NUMBER}"
         export CUJ3_ENGINE_PREFIX="cuj3_pr${_PR_NUMBER}"
+
+        # Evaluate only the newest commit of this PR: cancel its older runs,
+        # then delete what they or an earlier timed-out run left behind (Cloud
+        # Build stops those builds before their EXIT trap can run).
+        CREATED=$(gcloud builds describe "$BUILD_ID" --project="$PROJECT_ID" --region="$LOCATION" --format='value(createTime)')
+        for OLD in $(gcloud builds list --ongoing --project="$PROJECT_ID" --region="$LOCATION" --format='value(id)' \
+            --filter="substitutions.TRIGGER_NAME='$TRIGGER_NAME' AND substitutions._PR_NUMBER='$_PR_NUMBER' AND createTime<'$$CREATED'"); do
+          echo "Cancelling older run $$OLD of PR #$_PR_NUMBER..."
+          gcloud builds cancel "$$OLD" --project="$PROJECT_ID" --region="$LOCATION"
+        done
+        echo "Cleaning up resources left by earlier runs of PR #$_PR_NUMBER (NOT_FOUND errors are expected)..."
+        bash /workspace/evals/agent-mode/teardown.sh
 
         # Guarantee cloud resource cleanup even if EvalBench exits unexpectedly
         trap 'bash /workspace/evals/agent-mode/teardown.sh' EXIT
