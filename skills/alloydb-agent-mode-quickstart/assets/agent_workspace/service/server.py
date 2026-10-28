@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Agent Workspace ROUTER for per-session scratch PostgreSQL databases.
 
 One Cloud Run service per deployment runs [this router + PostgreSQL
@@ -53,6 +67,7 @@ MAX_ACTIVE_DBS = 20
 SESSION_CONN_LIMIT = 10
 SESSION_STMT_TIMEOUT = "120s"
 MAX_ROWS = 1000
+PROVISION_WAIT_S = 30  # max wait for another call's in-flight provisioning
 
 SESSION_HEADER = "x-session-id"
 
@@ -69,6 +84,8 @@ class Session:
   password: str
   created_at: int
   ready: bool = False  # False while CREATE DATABASE is still running
+  # Set once provisioning finishes, whether it succeeded or failed.
+  done: threading.Event = dataclasses.field(default_factory=threading.Event)
 
 
 # X-Session-Id -> that session's database.
@@ -151,7 +168,19 @@ def _session_from_headers(ctx: Context) -> Session | None:
   return session if session is not None and session.ready else None
 
 
+def _wait_for_provisioning(session: Session) -> None:
+  """Waits until no call is still creating the session's database."""
+  if not session.done.wait(PROVISION_WAIT_S):
+    raise TimeoutError(
+        "this session's scratch database is still being created; try again"
+        " in a few seconds"
+    )
+
+
 def _release(session: Session) -> None:
+  # Never DROP while a provision call is still creating the database: its
+  # CREATE would land after the DROP and leak the database and role.
+  _wait_for_provisioning(session)
   _drop_db_and_role(session.database, session.role)
   with _LOCK:
     if _sessions.get(session.session_id) is session:
@@ -220,38 +249,48 @@ def _provision(session_id: str) -> dict[str, Any]:
   """Provisions or returns the per-session PostgreSQL database and role."""
   with _LOCK:
     existing = _sessions.get(session_id)
-    if existing is not None:
-      return {
-          "status": (
-              "already_provisioned" if existing.ready else "provisioning"
-          ),
-          "database": existing.database,
-      }
-    if len(_sessions) >= MAX_ACTIVE_DBS:
-      return {
-          "error": (
-              f"capacity: {MAX_ACTIVE_DBS} active databases "
-              "already provisioned; try again after some are "
-              "released or reaped"
-          )
-      }
-    instance_id = uuid.uuid4().hex
-    session = Session(
-        session_id=session_id,
-        database=f"agent_db_{instance_id}",
-        role=f"agent_{instance_id[:12]}",
-        password=secrets.token_urlsafe(24),
-        created_at=int(time.time()),
-    )
-    _sessions[session_id] = session  # reserve before the slow CREATE
+    if existing is None:
+      if len(_sessions) >= MAX_ACTIVE_DBS:
+        return {
+            "error": (
+                f"capacity: {MAX_ACTIVE_DBS} active databases "
+                "already provisioned; try again after some are "
+                "released or reaped"
+            )
+        }
+      instance_id = uuid.uuid4().hex
+      session = Session(
+          session_id=session_id,
+          database=f"agent_db_{instance_id}",
+          role=f"agent_{instance_id[:12]}",
+          password=secrets.token_urlsafe(24),
+          created_at=int(time.time()),
+      )
+      _sessions[session_id] = session  # reserve before the slow CREATE
+  if existing is not None:
+    # A concurrent or retried call may still be creating it: wait for that
+    # call, so this one never returns a database that is not usable yet.
+    _wait_for_provisioning(existing)
+    if not existing.ready:
+      return {"error": "provisioning failed in a concurrent call; try again"}
+    return {"status": "already_provisioned", "database": existing.database}
   try:
     _create_db_and_role(session.database, session.role, session.password)
+    session.ready = True
   except Exception:
     with _LOCK:
       _sessions.pop(session_id, None)
-    _drop_db_and_role(session.database, session.role)
+    try:
+      _drop_db_and_role(session.database, session.role)
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+      # Log it and re-raise the original error below, not this one.
+      print(
+          f"[agent-workspace] cleanup failed for {session.database}: {exc!r}",
+          flush=True,
+      )
     raise
-  session.ready = True
+  finally:
+    session.done.set()
   print(
       f"[agent-workspace] provisioned {session.database} "
       f"({len(_sessions)}/{MAX_ACTIVE_DBS} active)",
@@ -274,7 +313,10 @@ async def provision_database(ctx: Context) -> dict[str, Any]:
   session_id = _session_id(ctx)
   if not session_id:
     return _NO_HEADER
-  return await asyncio.to_thread(_provision, session_id)
+  try:
+    return await asyncio.to_thread(_provision, session_id)
+  except (psycopg.Error, TimeoutError) as exc:
+    return {"error": str(exc).strip()}
 
 
 @mcp.tool()
@@ -286,10 +328,14 @@ async def release_database(ctx: Context) -> dict[str, Any]:
   session_id = _session_id(ctx)
   if not session_id:
     return _NO_HEADER
-  session = _sessions.get(session_id)
+  with _LOCK:
+    session = _sessions.get(session_id)
   if session is None:
     return {"status": "nothing_to_release"}
-  await asyncio.to_thread(_release, session)
+  try:
+    await asyncio.to_thread(_release, session)
+  except (psycopg.Error, TimeoutError) as exc:
+    return {"error": str(exc).strip()}
   print(f"[agent-workspace] released {session.database}", flush=True)
   return {"status": "released", "database": session.database}
 
@@ -340,7 +386,9 @@ _REAP_INTERVAL_S = 60
 def _reap_expired(ttl_minutes: int = DEFAULT_TTL_MIN) -> dict[str, Any]:
   """Drops session databases that have exceeded `ttl_minutes`."""
   now, released = int(time.time()), []
-  for session in list(_sessions.values()):
+  with _LOCK:
+    sessions = list(_sessions.values())
+  for session in sessions:
     if now - session.created_at > ttl_minutes * 60:
       try:
         _release(session)

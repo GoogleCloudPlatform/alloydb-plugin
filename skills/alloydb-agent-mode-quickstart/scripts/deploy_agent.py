@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 r"""Deploys agent runtimes to Agent Engine and registers them in Gemini Enterprise.
 
 Runtimes (in assets/agent_engine/):
@@ -24,6 +38,7 @@ from typing import Any
 from deploy_infra import _capture
 from deploy_infra import _wait_deployment_unlocked
 from deploy_infra import DeploymentConfig
+from google.api_core import exceptions as api_exceptions
 import requests
 
 _DISCOVERYENGINE = "https://discoveryengine.googleapis.com/v1alpha"
@@ -385,22 +400,26 @@ class GeminiEnterpriseRegistrar:
       print("==> gemini_enterprise.app_id not set; skipping registration")
       return
     all_engines = _find_engines(self.cfg)
-    target_engines = all_engines
-    if not self.cfg.coordinator:
-      target_engines = [
-          e
-          for e in all_engines
-          if _engine_agent_name(e) == _agent_name(self.cfg, "agent")
-      ]
-    if not target_engines:
+    # With a coordinator configured, register the coordinator; never fall back
+    # to the main agent in its place.
+    role = "coordinator" if self.cfg.coordinator else "agent"
+    engine = next(
+        (
+            e
+            for e in all_engines
+            if _engine_agent_name(e) == _agent_name(self.cfg, role)
+        ),
+        None,
+    )
+    if engine is None:
+      what = "swarm coordinator" if self.cfg.coordinator else "main agent"
       sys.exit(
-          f"No Agent Engine found for {self.cfg.name} — run `deploy_agent.py"
-          " deploy --config <config>` first."
+          f"No {what} Agent Engine found for {self.cfg.name} — run"
+          " `deploy_agent.py deploy --config <config>` first."
       )
-    engine = target_engines[0]
     engine_resource = engine.resource_name
     deployment_engines = {e.resource_name for e in all_engines}
-    if _engine_agent_name(engine) == _agent_name(self.cfg, "coordinator"):
+    if self.cfg.coordinator:
       display, desc = self.cfg.coordinator_display_info()
     else:
       display = self.cfg.agent_display_name
@@ -429,7 +448,7 @@ class GeminiEnterpriseRegistrar:
     existing = next(
         (
             a
-            for a in _rest("GET", base, self.cfg.project_id).get("agents", [])
+            for a in _list_ge_agents(base, self.cfg.project_id)
             if a.get("adkAgentDefinition", {})
             .get("provisionedReasoningEngine", {})
             .get("reasoningEngine")
@@ -514,11 +533,20 @@ class Teardown:
     try:
       for kind, item in found:
         self._delete(kind, item)
-    except (subprocess.CalledProcessError, RuntimeError) as exc:
+    except (
+        subprocess.CalledProcessError,
+        RuntimeError,
+        api_exceptions.GoogleAPIError,
+    ) as exc:
       sys.exit(
           f"TEARDOWN FAIL: {exc}. Fix it and re-run; done steps are skipped."
       )
     left = self._inventory()
+    for _ in range(5):  # Listings can lag behind a finished deletion.
+      if not left:
+        break
+      time.sleep(10)
+      left = self._inventory()
     if left:
       sys.exit(
           "TEARDOWN FAIL: still present: "
@@ -541,7 +569,12 @@ class Teardown:
     """Deletes one resource and waits until the deletion has finished."""
     print(f"==> Deleting {kind} {_label(item)}")
     if kind == "Gemini Enterprise agent":
-      _rest("DELETE", f"{_DISCOVERYENGINE}/{item}", self.cfg.project_id)
+      _rest(
+          "DELETE",
+          f"{_DISCOVERYENGINE}/{item}",
+          self.cfg.project_id,
+          allow_404=True,
+      )
     elif kind == "Agent Engine":
       item.delete(force=True)  # Also deletes its sessions.
     elif kind == "stack":
@@ -579,10 +612,9 @@ class Teardown:
         "/assistants/default_assistant/agents"
     )
     targets = {eng.resource_name for eng in engines}
-    agents = _rest("GET", url, self.cfg.project_id, allow_404=True)
     return [
         a["name"]
-        for a in agents.get("agents", [])
+        for a in _list_ge_agents(url, self.cfg.project_id, allow_404=True)
         if a.get("adkAgentDefinition", {})
         .get("provisionedReasoningEngine", {})
         .get("reasoningEngine")
@@ -743,23 +775,22 @@ class AgentValidator:
 
 
 def _is_tool_error(resp: Any) -> bool:
-  """Returns True if a tool response dictionary indicates an execution error."""
+  """Returns True if a tool response dictionary indicates an execution error.
+
+  Also checks the payloads a response can wrap: ADK's `result` (a non-dict
+  tool return) and an MCP tool result's `structuredContent`, where the Agent
+  Workspace returns its errors as ordinary results (`{"error": ...}`).
+  """
   if not isinstance(resp, dict):
     return False
-  if (
-      resp.get("error")
-      or resp.get("status") == "failed"
-      or bool(resp.get("isError"))
-      or bool(resp.get("is_error"))
-  ):
-    return True
-  nested = resp.get("result")
-  if isinstance(nested, dict) and (
-      nested.get("error")
-      or bool(nested.get("isError"))
-      or bool(nested.get("is_error"))
-  ):
-    return True
+  for payload in (resp, resp.get("result"), resp.get("structuredContent")):
+    if isinstance(payload, dict) and (
+        payload.get("error")
+        or payload.get("status") in ("failed", "error")
+        or payload.get("isError")
+        or payload.get("is_error")
+    ):
+      return True
   return False
 
 
@@ -880,6 +911,20 @@ def _rest(
       last = exc
     time.sleep(min(2**attempt, 8))
   raise last if last else RuntimeError(f"{method} {url} failed after retries")
+
+
+def _list_ge_agents(
+    url: str, project: str, allow_404: bool = False
+) -> list[dict[str, Any]]:
+  """Returns every agent from a Gemini Enterprise `agents` URL, page by page."""
+  agents: list[dict[str, Any]] = []
+  params: dict[str, Any] = {}
+  while True:
+    page = _rest("GET", url, project, params=params, allow_404=allow_404)
+    agents += page.get("agents", [])
+    if not page.get("nextPageToken"):
+      return agents
+    params = {"pageToken": page["nextPageToken"]}
 
 
 if __name__ == "__main__":

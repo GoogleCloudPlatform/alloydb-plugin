@@ -38,7 +38,8 @@ model: "gemini-3.8-flash"
 # OPTIONAL (default: none). Leading-hyphen suffix (e.g. "-dev", <=20 chars) for
 # the resources every deployment in this project SHARES — PSC endpoint, DNS
 # zone, Infra Manager deployment — so a throwaway stack can stand beside a real
-# one.
+# one. Give a suffixed stack its own `vpc.network` and `vpc.subnet`: in a shared
+# VPC its PSC endpoint IP and private run.app. DNS zone would collide.
 name_suffix: ""
 
 # Private path from Agent Engine into VPC (AlloyDB Agent Pool & internal Cloud
@@ -47,7 +48,7 @@ name_suffix: ""
 vpc:
   network: "agents-vpc"
   subnet: "agents-subnet"
-  network_attachment: "agents-psc-attachment"
+  network_attachment: ""
 
 # --- Target AlloyDB Agent Pool (REQUIRED) ------------------------------------
 # Provisioned in Step P or pre-existing. Deploy scripts automatically resolve
@@ -101,8 +102,8 @@ agent_engine:
   # of the main agent. Omit (or delete) this block to deploy only the main
   # agent. Everything inside defaults from `agent`.
   coordinator:
-    # OPTIONAL (default: "<agent.display_name> Swarm Coordinator"). SHOULD
-    # contain "Coordinator".
+    # OPTIONAL (default: "<agent.display_name or name> Swarm Coordinator").
+    # SHOULD contain "Coordinator".
     display_name: "Sales Analytics Swarm Coordinator"
 
     # OPTIONAL (default: inherits `agent.context` when empty/omitted). Plain

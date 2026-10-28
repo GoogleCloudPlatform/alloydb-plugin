@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Validates a `*.alloydb-agent.yaml` file offline and reports its topology.
 
 Usage:
@@ -15,7 +29,7 @@ from deploy_infra import DeploymentConfig
 
 NAME_RE = re.compile(r"^[a-z]([a-z0-9-]*[a-z0-9])?$")
 SUFFIX_RE = re.compile(r"^-[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
-REGION_RE = re.compile(r"^[a-z]+-[a-z]+[0-9]$")
+REGION_RE = re.compile(r"^[a-z]+-[a-z]+[0-9]+$")
 
 
 # =============================================================================
@@ -87,6 +101,17 @@ class ConfigValidator:
       ]
       for k in missing_db:
         self.errors.append(f"database.{k} is required")
+    for key, value in (
+        ("vpc.network", self.cfg.vpc.get("network")),
+        ("vpc.subnet", self.cfg.vpc.get("subnet")),
+        ("vpc.network_attachment", self.cfg.vpc.get("network_attachment")),
+        ("database.cluster", self.cfg.database.get("cluster")),
+        ("database.instance", self.cfg.database.get("instance")),
+    ):
+      if "/" in str(value or ""):
+        self.errors.append(
+            f"{key} {value!r} must be a plain name, not a resource path"
+        )
     return self.errors, self.warnings
 
   def _check_base(self) -> None:
@@ -133,6 +158,19 @@ class ConfigValidator:
             f"name is {len(cfg.name)} chars; agent-<name>@ must fit IAM's "
             "30-character account id, so 24 is the ceiling"
         )
+    # PostgreSQL truncates names past 63 bytes, which breaks AlloyDB IAM login.
+    db_user = cfg.agent_sa.removesuffix(".gserviceaccount.com")
+    if len(db_user) > 63:
+      err(
+          f"AlloyDB IAM database user {db_user!r} is {len(db_user)} chars;"
+          " PostgreSQL allows 63, so shorten name"
+      )
+    bucket = cfg.staging_bucket.removeprefix("gs://")
+    if len(bucket) > 63:
+      err(
+          f"staging bucket {bucket!r} is {len(bucket)} chars; Cloud Storage"
+          " allows 63, so shorten name_suffix"
+      )
     if not (cfg.raw.get("model") or "").strip():
       warn("model is unset; the default (gemini-3.8-flash) will be used")
 

@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 r"""Infrastructure provisioning for alloydb-agent-mode-quickstart (step 2).
 
 Provisions two isolated Terraform layers through Infrastructure Manager using a
@@ -27,6 +41,7 @@ import hashlib
 import json
 import os
 import pathlib
+import random
 import re
 import shutil
 import subprocess
@@ -144,16 +159,17 @@ class ProjectBootstrapper:
     """Enables bootstrap APIs, creates `infra-manager@` SA, and grants roles."""
     project = self.cfg.project_id
     runner = self.cfg.runner_sa
+    # Idempotent, so run it even when the runner SA already exists.
+    _run([
+        "gcloud",
+        "services",
+        "enable",
+        *BOOTSTRAP_APIS,
+        f"--project={project}",
+    ])
     if not _sa_exists(runner, project):
-      print("==> Infra Manager runner missing; bootstrapping", flush=True)
-      _run([
-          "gcloud",
-          "services",
-          "enable",
-          *BOOTSTRAP_APIS,
-          f"--project={project}",
-      ])
-      _run([
+      print("==> Infra Manager runner missing; creating it", flush=True)
+      res = _capture([
           "gcloud",
           "iam",
           "service-accounts",
@@ -162,6 +178,11 @@ class ProjectBootstrapper:
           f"--project={project}",
           "--display-name=Infrastructure Manager runner (alloydb-agent)",
       ])
+      # A concurrent run may have created it first (ALREADY_EXISTS).
+      if res.returncode != 0 and not _sa_exists(runner, project):
+        sys.exit(
+            f"FAILED: could not create {runner}:\n{(res.stderr or '').strip()}"
+        )
 
     _ensure_project_roles(project, runner, RUNNER_ROLES)
     print(f"==> Runner ready: {runner}", flush=True)
@@ -522,18 +543,10 @@ class DeploymentConfig:
   def from_file(cls, cfg_path: str | pathlib.Path) -> "DeploymentConfig":
     """Loads and resolves a deployment configuration from a YAML file path."""
     path = pathlib.Path(cfg_path).resolve()
-    raw = yaml.safe_load(path.read_text()) or {}
-    ae = (
-        raw.get("agent_engine")
-        if isinstance(raw.get("agent_engine"), dict)
-        else {}
-    )
-    agent = ae.get("agent") if isinstance(ae.get("agent"), dict) else {}
-    ge = (
-        raw.get("gemini_enterprise")
-        if isinstance(raw.get("gemini_enterprise"), dict)
-        else {}
-    )
+    raw = _as_dict(yaml.safe_load(path.read_text()))
+    ae = _as_dict(raw.get("agent_engine"))
+    agent = _as_dict(ae.get("agent"))
+    ge = _as_dict(raw.get("gemini_enterprise"))
     ws_flag = agent.get("workspace")
     raw_coord = ae.get("coordinator")
     if "coordinator" in ae and (
@@ -556,9 +569,9 @@ class DeploymentConfig:
         agent=agent,
         coordinator=coord,
         gemini_enterprise=ge,
-        database=raw.get("database") or {},
+        database=_as_dict(raw.get("database")),
         agent_workspace=bool(ws_flag) if isinstance(ws_flag, bool) else False,
-        vpc=raw.get("vpc") or {},
+        vpc=_as_dict(raw.get("vpc")),
     )
 
   @property
@@ -841,6 +854,10 @@ def _apply_infra_manager(
           )
       ):
         raise subprocess.CalledProcessError(proc.returncode, apply_cmd)
+      # Random delay so two runs that failed together don't retry in lockstep.
+      delay = random.uniform(1, 10) * attempt
+      print(f"==> Concurrent apply; retrying in {delay:.0f}s", flush=True)
+      time.sleep(delay)
       _wait_deployment_unlocked(project, region, deployment_id)
   return deployment
 
@@ -848,7 +865,15 @@ def _apply_infra_manager(
 def _get_deployment_existing(
     project: str, region: str, deployment_id: str
 ) -> set[str] | None:
-  """Returns the `existing` set from the latest applied revision, or None."""
+  """Returns the deployment's recorded `existing` set, or None if it has none.
+
+  Uses the `existing` output of the latest successful apply. A failed apply
+  records no outputs but may already have created resources, so until one
+  succeeds, falls back to the `existing` input staged for the latest revision
+  that ran Terraform (Infra Manager keeps its `config.auto.tfvars.json` under
+  `applyResults.content`). Otherwise a retry would mistake those resources for
+  pre-existing ones and destroy them (`count` 1 -> 0).
+  """
   res = subprocess.run(
       [
           "gcloud",
@@ -871,21 +896,35 @@ def _get_deployment_existing(
         f"FAILED: could not query revisions for {deployment_id}:"
         f" {(res.stderr or '').strip()}"
     )
-  for rev in json.loads(res.stdout or "[]"):
+  revisions = json.loads(res.stdout or "[]")
+  for rev in revisions:
     outputs = (rev.get("applyResults") or {}).get("outputs") or {}
     if "existing" in outputs:
       return set(outputs["existing"].get("value") or [])
+  for rev in revisions:
+    content = (rev.get("applyResults") or {}).get("content")
+    if not content:
+      continue
+    # Absent if the revision failed before Terraform ran (nothing created).
+    tfvars = json.loads(
+        _out(["gcloud", "storage", "cat", f"{content}/config.auto.tfvars.json"])
+        or "{}"
+    )
+    if "existing" in tfvars:
+      return set(tfvars["existing"] or [])
   return None
 
 
 def _get_project_sa_roles(project: str) -> dict[str, set[str]]:
-  """Returns `{sa_email: {role, ...}}` from the project IAM policy."""
+  """Returns `{sa_email: {role, ...}}` granted unconditionally on `project`."""
   raw = _out(
       ["gcloud", "projects", "get-iam-policy", project, "--format=json"],
       check=True,
   )
   roles_by_sa: dict[str, set[str]] = {}
   for binding in (json.loads(raw) if raw else {}).get("bindings", []):
+    if binding.get("condition"):
+      continue  # A conditional grant may not apply, so don't count it.
     role = binding.get("role", "")
     for member in binding.get("members", []):
       if member.startswith("serviceAccount:"):
@@ -953,6 +992,11 @@ def _out(argv: list[str], check: bool = False) -> str:
 def _capture(argv: list[str]) -> subprocess.CompletedProcess[str]:
   """Runs a command without raising and returns its captured result."""
   return subprocess.run(argv, check=False, capture_output=True, text=True)
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+  """Returns `value` if it is a mapping, else `{}` (missing or malformed)."""
+  return value if isinstance(value, dict) else {}
 
 
 def _retry(
