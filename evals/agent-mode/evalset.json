@@ -22,7 +22,8 @@
         "Before reporting that teardown is complete, the agent ran a describe or list command for `${CUJ1_CLUSTER}` (which contains its instances), `alloydb-agents-${CUJ1_VPC}`, `${CUJ1_SUBNET}`, and `${CUJ1_VPC}`, and reported that all of the deleted resources are gone."
       ],
       "kind": "live",
-      "max_turns": 40
+      "max_turns": 40,
+      "eval_case_timeout": "90m"
     },
     {
       "id": "cuj2-simple-agent",
@@ -45,7 +46,8 @@
         "Before reporting that teardown is complete, the agent confirmed that the Agent Engine, the stack, and the database user are gone: `deploy_agent.py teardown --yes` reported `TEARDOWN PASS`, or the agent ran describe or list commands."
       ],
       "kind": "live",
-      "max_turns": 30
+      "max_turns": 30,
+      "eval_case_timeout": "45m"
     },
     {
       "id": "cuj3-agent-swarm",
@@ -69,7 +71,8 @@
         "Before reporting that teardown is complete, the agent confirmed that both Agent Engines, the stack, and the database user are gone: `deploy_agent.py teardown --yes` reported `TEARDOWN PASS`, or the agent ran describe or list commands."
       ],
       "kind": "live",
-      "max_turns": 30
+      "max_turns": 30,
+      "eval_case_timeout": "60m"
     }
   ]
 }

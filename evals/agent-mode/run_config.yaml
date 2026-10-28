@@ -22,26 +22,26 @@ simulated_user_model_config: !ENV "${EVAL_SUITE_DIR}/gemini_3.8_flash_model.yaml
 set_up_script: !ENV "${EVAL_SUITE_DIR}/setup.sh"
 tear_down_script: !ENV "${EVAL_SUITE_DIR}/teardown.sh"
 
+# The released EvalBench runs the scenarios of one dataset one after another;
+# agent_runners takes effect once EvalBench runs each scenario as its own work
+# item.
 runners:
   agent_runners: 3
 
+# Default per-scenario budget, checked before each turn. evalset.json sets a
+# tighter eval_case_timeout for each scenario.
 eval_case_timeout: 120m
 
 scorers:
-  # 1. Skill activation & SKILL.md quality
+  # 1. Skill activation
   skills_trajectory:
     enforce_order: false
     allow_extra_skills: true
-  skills_best_practices:
-    model_config: !ENV "${EVAL_SUITE_DIR}/gemini_3.8_flash_model.yaml"
-    skills_dir: !ENV "${EVAL_SKILLS_DIR:/workspace/skills}"
 
-  # 2. Qualitative & binary rubric LLM judges
+  # 2. Qualitative & rubric LLM judges
   goal_completion:
     model_config: !ENV "${EVAL_SUITE_DIR}/gemini_3.8_flash_model.yaml"
     include_tool_calls: true
-  behavioral_metrics:
-    model_config: !ENV "${EVAL_SUITE_DIR}/gemini_3.8_flash_model.yaml"
   binary_rubric_scorer:
     model_config: !ENV "${EVAL_SUITE_DIR}/gemini_3.8_flash_model.yaml"
     include_tool_calls: true

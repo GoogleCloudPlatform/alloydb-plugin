@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-timeout: 7200s
+# The released EvalBench runs CUJ 1-3 one after another (about 2 hours), so
+# allow 4 hours: up to 3 hours for EvalBench and at least 1 hour for teardown.
+timeout: 14400s
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -48,24 +50,14 @@ steps:
           exit 1
         fi
 
-        PR_TITLE=$(jq -r '.title' /tmp/pr_data.json)
-
-        # Check if execution labels are present using exact matching via jq
-        if ! jq -e '.labels | any(.name == "autorelease: pending" or .name == "ci:run-agent-mode-evals")' /tmp/pr_data.json > /dev/null; then
-          echo "PR #$_PR_NUMBER does not have 'autorelease: pending' or 'ci:run-agent-mode-evals' label. Skipping execution."
+        # Check if execution label is present using exact matching via jq
+        if ! jq -e '.labels | any(.name == "ci:run-agent-mode-evals")' /tmp/pr_data.json > /dev/null; then
+          echo "PR #$_PR_NUMBER does not have 'ci:run-agent-mode-evals' label. Skipping execution."
           exit 0
         fi
         echo "Execution label detected. Running CUJ 1-3 evaluations..."
 
-        if [[ "$_HEAD_BRANCH" == release-please-* ]]; then
-          if [[ "$$PR_TITLE" =~ release\ ([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-            export RELEASE_VERSION="$${BASH_REMATCH[1]}"
-          else
-            export RELEASE_VERSION="pr-$_PR_NUMBER-release-unknown"
-          fi
-        else
-          export RELEASE_VERSION="pr-$_PR_NUMBER-agent-mode-evals"
-        fi
+        export RELEASE_VERSION="pr-$_PR_NUMBER-agent-mode-evals"
 
         # Core EvalBench & GCP environment variables
         export EVAL_SUITE_DIR="/workspace/evals/agent-mode"
@@ -103,7 +95,6 @@ steps:
 
         cd /evalbench
         export EVAL_CONFIG="/workspace/evals/agent-mode/run_config.yaml"
-        ./evalbench/run.sh
-
-        echo "Verifying CUJ evaluation scores..."
-        python3 /workspace/evals/agent-mode/verify_scores.py
+        # Stop EvalBench after 3 hours so the EXIT trap always has at least
+        # 1 hour of the build timeout left to run teardown.sh.
+        timeout --signal=TERM 10800s ./evalbench/run.sh

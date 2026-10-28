@@ -16,8 +16,7 @@ skill, powered by [EvalBench](https://github.com/GoogleCloudPlatform/evalbench).
 
 When a pull request modifies `skills/alloydb-agent-mode-quickstart/**` or
 `evals/agent-mode/**`, Cloud Build runs [`cloudbuild.yaml`](cloudbuild.yaml)
-when either the `ci:run-agent-mode-evals` or `autorelease: pending` label is
-applied to the PR.
+when the `ci:run-agent-mode-evals` label is applied to the PR.
 
 All per-run cloud resources are namespaced by pull request number (`pr<NUMBER>`)
 and automatically cleaned up by [`teardown.sh`](teardown.sh).
