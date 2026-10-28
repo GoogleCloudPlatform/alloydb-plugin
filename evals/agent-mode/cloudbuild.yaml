@@ -51,8 +51,8 @@ steps:
         fi
 
         # Check if execution label is present using exact matching via jq
-        if ! jq -e '.labels | any(.name == "ci:run-agent-mode-evals")' /tmp/pr_data.json > /dev/null; then
-          echo "PR #$_PR_NUMBER does not have 'ci:run-agent-mode-evals' label. Skipping execution."
+        if ! jq -e '.labels | any(.name == "ci:run-evals-agent-mode")' /tmp/pr_data.json > /dev/null; then
+          echo "PR #$_PR_NUMBER does not have 'ci:run-evals-agent-mode' label. Skipping execution."
           exit 0
         fi
         echo "Execution label detected. Running CUJ 1-3 evaluations..."
