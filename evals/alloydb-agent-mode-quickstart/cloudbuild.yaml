@@ -54,7 +54,7 @@ steps:
         export RELEASE_VERSION="pr-$_PR_NUMBER-agent-mode-evals"
 
         # Core EvalBench & GCP environment variables
-        export EVAL_SUITE_DIR="/workspace/evals/agent-mode"
+        export EVAL_SUITE_DIR="/workspace/evals/alloydb-agent-mode-quickstart"
         export EVAL_SKILLS_DIR="/workspace/skills"
         export EVAL_RESULTS_DIR="/tmp/alloydb-agent-mode-evals/results"
         export EVAL_GCP_PROJECT_ID="$PROJECT_ID"
@@ -92,15 +92,15 @@ steps:
           gcloud builds cancel "$$OLD" --project="$PROJECT_ID" --region="$LOCATION"
         done
         echo "Cleaning up resources left by earlier runs of PR #$_PR_NUMBER (NOT_FOUND errors are expected)..."
-        bash /workspace/evals/agent-mode/teardown.sh
+        bash /workspace/evals/alloydb-agent-mode-quickstart/teardown.sh
 
         # Guarantee cloud resource cleanup even if EvalBench exits unexpectedly
-        trap 'bash /workspace/evals/agent-mode/teardown.sh' EXIT
+        trap 'bash /workspace/evals/alloydb-agent-mode-quickstart/teardown.sh' EXIT
 
-        cat /workspace/evals/agent-mode/ci_metadata.yaml >> /workspace/evals/agent-mode/run_config.yaml
+        cat /workspace/evals/alloydb-agent-mode-quickstart/ci_metadata.yaml >> /workspace/evals/alloydb-agent-mode-quickstart/run_config.yaml
 
         cd /evalbench
-        export EVAL_CONFIG="/workspace/evals/agent-mode/run_config.yaml"
+        export EVAL_CONFIG="/workspace/evals/alloydb-agent-mode-quickstart/run_config.yaml"
         # Stop EvalBench after 225 minutes so the EXIT trap always has at least
         # 1 hour of the build timeout left to run teardown.sh.
         timeout --signal=TERM 13500s ./evalbench/run.sh

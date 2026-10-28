@@ -15,8 +15,9 @@ skill, powered by [EvalBench](https://github.com/GoogleCloudPlatform/evalbench).
 ## Triggering from a Pull Request
 
 When a pull request modifies `skills/alloydb-agent-mode-quickstart/**` or
-`evals/agent-mode/**`, Cloud Build runs [`cloudbuild.yaml`](cloudbuild.yaml)
-when the `ci:run-evals-agent-mode` label is applied to the PR.
+`evals/alloydb-agent-mode-quickstart/**`, Cloud Build runs
+[`cloudbuild.yaml`](cloudbuild.yaml) when the `ci:run-evals-agent-mode` label
+is applied to the PR.
 
 All per-run cloud resources are namespaced by pull request number (`pr<NUMBER>`)
 and automatically cleaned up by [`teardown.sh`](teardown.sh). A new push to a
@@ -28,7 +29,7 @@ From a local [EvalBench](https://github.com/GoogleCloudPlatform/evalbench)
 checkout with `gcloud` and Application Default Credentials authenticated:
 
 ```bash
-export EVAL_SUITE_DIR="/path/to/alloydb-plugin/evals/agent-mode"
+export EVAL_SUITE_DIR="/path/to/alloydb-plugin/evals/alloydb-agent-mode-quickstart"
 export EVAL_SKILLS_DIR="/path/to/alloydb-plugin/skills"
 export EVAL_GCP_PROJECT_ID="<your-gcp-project>"
 export EVAL_GCP_PROJECT_REGION="us-central1"
