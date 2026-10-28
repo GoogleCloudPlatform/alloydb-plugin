@@ -576,7 +576,10 @@ class Teardown:
           allow_404=True,
       )
     elif kind == "Agent Engine":
-      item.delete(force=True)  # Also deletes its sessions.
+      try:
+        item.delete(force=True)  # Also deletes its sessions.
+      except api_exceptions.NotFound:
+        pass  # Already deleted; the listing was stale.
     elif kind == "stack":
       _wait_deployment_unlocked(
           self.cfg.project_id, self.cfg.region, f"alloydb-agent-{self.cfg.name}"
