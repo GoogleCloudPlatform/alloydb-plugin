@@ -122,39 +122,30 @@ gcloud beta alloydb clusters update <CLUSTER> \
     may restart the primary.
 -   Skip P.3; the user's own database becomes `database.database`.
 
-## P.3 Load data (optional sample)
+## P.3 Load data (optional)
 
-A new cluster has only the `postgres` database. To use your own data, skip
-this step and set `database.database` to your database later. Otherwise, in
-**AlloyDB Studio** (console → Clusters → `<CLUSTER>` → AlloyDB Studio), sign in
-to `postgres` as `postgres` with `<DB_PASSWORD>` and run `CREATE DATABASE
-inventory_db;`. Then use **Switch user/database** to `inventory_db` and run:
+A new cluster starts with an empty `postgres` database, which is enough to
+provision the pool and pass Step 4 (`deploy_agent.py validate`). Skip this step
+unless the user wants to load SQL data now.
 
-```sql
-CREATE TABLE products (
-    product_id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    category VARCHAR(100),
-    price DECIMAL(10, 2),
-    stock_quantity INTEGER,
-    last_restocked TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+To import a `.sql` or `.sql.gz` file from Cloud Storage once `<PRIMARY>` is
+`READY` and no other cluster operation is running (for example, after P.6):
 
-INSERT INTO products (name, category, price, stock_quantity) VALUES
-('Pixel 8 Pro', 'Electronics', 999.00, 50),
-('Pixel Watch 2', 'Wearables', 349.99, 120),
-('Pixel Buds Pro', 'Audio', 199.99, 200),
-('Nest Hub Max', 'Smart Home', 229.00, 45),
-('Nest Cam (Battery)', 'Smart Home', 179.99, 80),
-('Chromecast with Google TV', 'Electronics', 49.99, 300),
-('Pixel Fold', 'Electronics', 1799.00, 15),
-('Pixel Tablet', 'Electronics', 499.00, 60),
-('Nest Wifi Pro', 'Networking', 199.99, 110),
-('Fitbit Charge 6', 'Wearables', 159.95, 150);
+```bash
+gcloud alloydb clusters import <CLUSTER> \
+    --project=<PROJECT> --region=<REGION> \
+    --database=postgres --user=postgres \
+    --gcs-uri=gs://<BUCKET>/<FILE>.sql \
+    --sql
 ```
 
-The primary has only a private IP, so the user runs this. Say what's needed and
-carry on; nothing before validation (step 4) depends on it.
+-   For a private bucket, grant `roles/storage.objectViewer` on `gs://<BUCKET>`
+    to `service-<PROJECT_NUMBER>@gcp-sa-alloydb.iam.gserviceaccount.com` first.
+-   `gcloud` has no `alloydb databases create` command. Pass
+    `--database=postgres` when the SQL file creates and switches to its own
+    database (`COMMIT;` first to exit `clusters import`'s implicit transaction,
+    then `CREATE DATABASE` and `\connect <DB>`), or create `<DB>` in **AlloyDB
+    Studio** first and pass `--database=<DB>`.
 
 ## P.4 Prepare the network
 
