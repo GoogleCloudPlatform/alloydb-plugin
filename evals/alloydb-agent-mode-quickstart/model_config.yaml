@@ -12,7 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-gemini_cli_version: "@google/gemini-cli@latest"
+# Pinned: Gemini CLI 0.63.0 and later deny, in non-interactive mode and even
+# with --yolo, any shell command that reuses a flag seen in earlier tool output
+# (for example `--network`, printed by `gcloud compute networks create`). That
+# blocks many of the skill's gcloud commands mid-scenario.
+gemini_cli_version: "@google/gemini-cli@0.62.0"
 generator: gemini_cli
 env:
   GOOGLE_CLOUD_PROJECT: !ENV "${GOOGLE_CLOUD_PROJECT}"
