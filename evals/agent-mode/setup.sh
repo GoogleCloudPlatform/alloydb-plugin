@@ -50,9 +50,10 @@ for scenario in ${scenarios}; do
   rm -rf ".venv/fake_home/.gemini/tmp/${scenario}"
 done
 
-# Configure Gemini CLI shell inactivity timeout (40 min) and workspace include
-# directories so long-running AlloyDB / Agent Engine operations are not killed
-# after the default 5-minute silent stdout window.
+# Raise the Gemini CLI shell inactivity timeout to 40 minutes so long-running
+# AlloyDB and Agent Engine operations are not killed after the default 5-minute
+# window without output. Do not add the repository checkout to the CLI's
+# workspace directories: agents under evaluation must not read the evalset.
 python3 - << 'EOF'
 import json
 import os
@@ -66,12 +67,6 @@ if os.path.exists(settings_path):
             data = json.load(f)
     except Exception:
         data = {}
-
-ctx = data.setdefault("context", {})
-inc = ctx.setdefault("includeDirectories", [])
-for extra in ("/tmp/alloydb-agent-mode-evals", "/workspace"):
-    if os.path.exists(extra) and extra not in inc:
-        inc.append(extra)
 
 tools = data.setdefault("tools", {})
 shell_cfg = tools.setdefault("shell", {})
