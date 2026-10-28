@@ -138,8 +138,8 @@ using `gcloud`, confirming each command's output before running the next.
     without asking.
 -   Use only the cluster the user names; never offer or change other clusters in
     the project.
--   Loading sample data (P.3) is optional and runs in AlloyDB Studio; do not
-    block Steps 0–3 on it.
+-   Loading data (P.3) is optional; an empty `postgres` database is enough for
+    pool setup and Step 4 (`deploy_agent.py validate`).
 
 ### 0. Environment initialization
 
