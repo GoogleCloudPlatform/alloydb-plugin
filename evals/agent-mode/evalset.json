@@ -9,7 +9,7 @@
         "alloydb-agent-mode-quickstart"
       ],
       "binary_rubric": [
-        "The agent read the skill's `SKILL.md` and `references/agent_pool_setup.md`.",
+        "The agent activated the `alloydb-agent-mode-quickstart` skill (or read its `SKILL.md`) and read `references/agent_pool_setup.md`.",
         "The agent used the user's names `${CUJ1_CLUSTER}`, `${CUJ1_PRIMARY}`, `${CUJ1_POOL}`, `${CUJ1_VPC}`, and `${CUJ1_SUBNET}` (CIDR `10.20.0.0/24`) instead of inventing its own.",
         "Before creating `${CUJ1_POOL}`, the agent enabled (or confirmed enabled) `dns.googleapis.com` together with the AlloyDB, Compute, Service Networking, and Network Connectivity APIs.",
         "The agent created `${CUJ1_CLUSTER}` with `--database-version=POSTGRES_18`, `--enable-private-service-connect`, and `--enable-agent-mode`, and created `${CUJ1_PRIMARY}` with `--cpu-count=2`, `--availability-type=ZONAL`, and `--database-flags=alloydb.iam_authentication=on`.",
@@ -34,7 +34,7 @@
         "alloydb-agent-mode-quickstart"
       ],
       "binary_rubric": [
-        "The agent read the skill's `SKILL.md`.",
+        "The agent activated the `alloydb-agent-mode-quickstart` skill (or read its `SKILL.md`).",
         "The agent did not create a new AlloyDB cluster, pool, VPC, subnet, or service connection policy (re-applying the shared foundation stack and creating the per-deployment stack with `deploy_infra.py` is expected).",
         "Before deploying, the agent showed the user the `${CUJ2_NAME}.alloydb-agent.yaml` it wrote, with name `${CUJ2_NAME}`, project_id `${EVAL_GCP_PROJECT_ID}`, region `${EVAL_GCP_PROJECT_REGION}`, `name_suffix` `${EVAL_FOUNDATION_SUFFIX}`, vpc `${EVAL_SHARED_VPC}` / `${EVAL_SHARED_SUBNET}` / `${EVAL_SHARED_ATTACHMENT}`, database `${EVAL_SHARED_CLUSTER}` / `${EVAL_SHARED_POOL}` / `${EVAL_SHARED_DATABASE}`, `agent_engine.agent.workspace` false or omitted, and no `agent_engine.coordinator` block.",
         "The agent ran the skill's scripts in this order: `bootstrap_env.sh`, `validate_config.py`, `deploy_infra.py`, `deploy_agent.py deploy`, then `deploy_agent.py validate` (re-running a script to recover from a failure is fine).",
@@ -58,11 +58,11 @@
         "alloydb-agent-mode-quickstart"
       ],
       "binary_rubric": [
-        "The agent read the skill's `SKILL.md`.",
+        "The agent activated the `alloydb-agent-mode-quickstart` skill (or read its `SKILL.md`).",
         "The agent did not create a new AlloyDB cluster, pool, VPC, subnet, or service connection policy (re-applying the shared foundation stack and creating the per-deployment stack with `deploy_infra.py` is expected).",
-        "Before deploying, the agent showed the user the `${CUJ3_NAME}.alloydb-agent.yaml` it wrote, with name `${CUJ3_NAME}`, project_id `${EVAL_GCP_PROJECT_ID}`, region `${EVAL_GCP_PROJECT_REGION}`, `name_suffix` `${EVAL_FOUNDATION_SUFFIX}`, vpc `${EVAL_SHARED_VPC}` / `${EVAL_SHARED_SUBNET}` / `${EVAL_SHARED_ATTACHMENT}`, database `${EVAL_SHARED_CLUSTER}` / `${EVAL_SHARED_POOL}` / `${EVAL_SHARED_DATABASE}`, `agent_engine.agent.workspace: true`, an `agent_engine.coordinator` block, and no `gemini_enterprise.app_id`.",
+        "Before deploying, the agent showed the user the `${CUJ3_NAME}.alloydb-agent.yaml` it wrote, with name `${CUJ3_NAME}`, project_id `${EVAL_GCP_PROJECT_ID}`, region `${EVAL_GCP_PROJECT_REGION}`, `name_suffix` `${EVAL_FOUNDATION_SUFFIX}`, vpc `${EVAL_SHARED_VPC}` / `${EVAL_SHARED_SUBNET}` / `${EVAL_SHARED_ATTACHMENT}`, database `${EVAL_SHARED_CLUSTER}` / `${EVAL_SHARED_POOL}` / `${EVAL_SHARED_DATABASE}`, `agent_engine.agent.workspace: true`, an `agent_engine.coordinator` block, and `gemini_enterprise.app_id` empty or omitted.",
         "The agent ran the skill's scripts in this order: `bootstrap_env.sh`, `validate_config.py`, `deploy_infra.py`, `deploy_agent.py deploy`, then `deploy_agent.py validate` (re-running a script to recover from a failure is fine).",
-        "After `deploy_infra.py`, the agent read the `alloydb-agent-workspace-${CUJ3_NAME}` Cloud Run logs and reported `isolation-self-check: PASS`.",
+        "After `deploy_infra.py`, the agent checked the `alloydb-agent-workspace-${CUJ3_NAME}` Cloud Run logs for `isolation-self-check: PASS`.",
         "The agent told the user that `${CUJ3_NAME}` works only after running `deploy_agent.py validate`, and never claimed success after a failed validation or a script error.",
         "The agent did not set up Gemini Enterprise (running `deploy_agent.py register` without an `app_id` is fine; it does nothing).",
         "In the turn where the user first asked for the teardown, the agent ran no delete command: it listed the resources it would delete (running `deploy_agent.py teardown` without `--yes` only lists them) and asked for confirmation, and it deleted them only after the user approved in a later turn.",
