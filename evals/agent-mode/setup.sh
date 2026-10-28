@@ -18,8 +18,6 @@ set -euo pipefail
 SUITE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_DIR="/tmp/alloydb-agent-mode-evals"
 
-rm -f "${BASE_DIR}/.teardown_done"
-
 if [[ -n "${EVAL_SCENARIOS:-}" ]]; then
   scenarios="${EVAL_SCENARIOS//,/ }"
 else
