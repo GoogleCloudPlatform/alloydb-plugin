@@ -25,6 +25,7 @@ This repository packages [MCP Toolbox](https://github.com/googleapis/mcp-toolbox
 - [Installing via a compatible Agent Plugins client](#installing-via-a-compatible-agent-plugins-client)
 - [Usage Examples](#usage-examples)
 - [Available Tools](#available-tools)
+- [Included Skills](#included-skills)
 - [Generating Skills Instead](#generating-skills-instead)
 - [Additional Agent Skills](#additional-agent-skills)
 - [Troubleshooting](#troubleshooting)
@@ -223,6 +224,18 @@ The tools come from MCP Toolbox's prebuilt `alloydb-postgres` server, grouped in
 
 For the full, up-to-date list, see the [`alloydb-postgres` prebuilt config](https://github.com/googleapis/mcp-toolbox/blob/main/internal/prebuiltconfigs/tools/alloydb-postgres.yaml)
 in the MCP Toolbox repository.
+
+## Included Skills
+
+This plugin ships the following agent skill in [`skills/`](./skills):
+
+- **[alloydb-agent-mode-quickstart](./skills/alloydb-agent-mode-quickstart/SKILL.md)** - Provision an AlloyDB agent pool over Private Service Connect, then deploy a data agent or a multi-agent swarm on Vertex AI Agent Engine that queries the pool over MCP, and optionally publish it to Gemini Enterprise.
+
+For example, prompt your agent:
+
+```text
+Use the alloydb-agent-mode-quickstart skill to create a new AlloyDB cluster with PostgreSQL for agents and an agent pool in my project PROJECT_ID in region REGION_NAME.
+```
 
 ## Generating Skills Instead
 
