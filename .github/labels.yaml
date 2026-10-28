@@ -88,3 +88,7 @@
 - name: 'ci:run-evals'
   color: 4285f4
   description: Manually trigger the evaluation CI pipeline on a PR.
+
+- name: 'ci:run-agent-mode-evals'
+  color: 4285f4
+  description: Manually trigger the AlloyDB Agent Mode CUJ evaluation pipeline on a PR.
