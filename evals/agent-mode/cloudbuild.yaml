@@ -20,18 +20,10 @@ timeout: 18000s
 options:
   logging: CLOUD_LOGGING_ONLY
 
-substitutions:
-  _EVAL_SERVER_IMAGE: us-central1-docker.pkg.dev/cloud-db-nl2sql/evalbench/eval_server:latest
-  _TARGET_REGION: us-central1
-  _SHARED_CLUSTER: eval-agent-cluster
-  _SHARED_POOL: eval-agent-pool
-  _SHARED_DATABASE: postgres
-  _FOUNDATION_SUFFIX: -evals
-  _SHARED_VPC: agents-vpc
-  _SHARED_SUBNET: agents-subnet
-  _SHARED_ATTACHMENT: agents-psc-attachment-evals
-  _EVAL_REPORTING_PROJECT: cloud-db-nl2sql
-  _EVAL_REPORTING_DATASET: evalbench
+# The Cloud Build trigger sets the environment-specific substitutions:
+# _EVAL_SERVER_IMAGE, _TARGET_REGION, _SHARED_CLUSTER, _SHARED_POOL,
+# _SHARED_DATABASE, _FOUNDATION_SUFFIX, _SHARED_VPC, _SHARED_SUBNET,
+# _SHARED_ATTACHMENT, _EVAL_REPORTING_PROJECT, and _EVAL_REPORTING_DATASET.
 
 steps:
   - name: '${_EVAL_SERVER_IMAGE}'
@@ -87,7 +79,7 @@ steps:
         export CUJ1_SUBNET="cuj1-pr${_PR_NUMBER}-subnet"
         export CUJ2_NAME="cuj2-pr${_PR_NUMBER}"
         export CUJ3_NAME="cuj3-pr${_PR_NUMBER}"
-        export CUJ3_ENGINE_PREFIX="cuj3_pr${_PR_NUMBER}"
+        export CUJ3_ENGINE_PREFIX="$${CUJ3_NAME//-/_}"
 
         # Evaluate only the newest commit of this PR: cancel its older runs,
         # then delete what they or an earlier timed-out run left behind (Cloud

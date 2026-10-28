@@ -54,9 +54,10 @@ export CUJ1_VPC="cuj1-local-vpc"
 export CUJ1_SUBNET="cuj1-local-subnet"
 export CUJ2_NAME="cuj2-local"
 export CUJ3_NAME="cuj3-local"
-export CUJ3_ENGINE_PREFIX="cuj3_local"
+export CUJ3_ENGINE_PREFIX="${CUJ3_NAME//-/_}"
 
-# Optional: select a subset of scenarios (comma-separated)
+# Optional: run only some scenarios (comma-separated). Keep all variables above
+# set anyway: EvalBench resolves every ${...} in evalset.json before filtering.
 export EVAL_SCENARIOS="cuj2-simple-agent"
 
 export EVAL_CONFIG="${EVAL_SUITE_DIR}/run_config.yaml"

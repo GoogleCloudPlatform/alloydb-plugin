@@ -18,6 +18,24 @@ set -euo pipefail
 SUITE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_DIR="/tmp/alloydb-agent-mode-evals"
 
+# Stops the run before any scenario starts. EvalBench ignores this script's exit
+# code, so kill it. Reads the parent's command line from /proc first, falling
+# back to `ps` (not every container image has `ps`).
+fail() {
+  echo "[setup] ERROR: $*" >&2
+  if [[ "$(tr '\0' ' ' < "/proc/${PPID}/cmdline" 2>/dev/null || ps -o args= -p "${PPID}")" == *evalbench.py* ]]; then
+    kill -KILL "${PPID}"
+  fi
+  exit 1
+}
+trap 'fail "setup.sh failed at line ${LINENO}"' ERR
+
+# teardown.sh refuses an empty EVAL_SCENARIOS, so refuse it before anything is
+# created.
+if [[ -v EVAL_SCENARIOS && -z "${EVAL_SCENARIOS}" ]]; then
+  fail "EVAL_SCENARIOS is set but empty; unset it to run all scenarios."
+fi
+
 if [[ -n "${EVAL_SCENARIOS:-}" ]]; then
   scenarios="${EVAL_SCENARIOS//,/ }"
 else
@@ -29,7 +47,7 @@ for scenario in ${scenarios}; do
   rm -rf "${ws}"
   mkdir -p "${ws}"
   # Remove any stale Gemini CLI session directory for this workspace
-  rm -rf ".venv/fake_home/.gemini/tmp/${scenario}" 2>/dev/null || true
+  rm -rf ".venv/fake_home/.gemini/tmp/${scenario}"
 done
 
 # Configure Gemini CLI shell inactivity timeout (40 min) and workspace include
