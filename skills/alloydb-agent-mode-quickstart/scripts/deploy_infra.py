@@ -905,11 +905,20 @@ def _get_deployment_existing(
     content = (rev.get("applyResults") or {}).get("content")
     if not content:
       continue
-    # Absent if the revision failed before Terraform ran (nothing created).
-    tfvars = json.loads(
-        _out(["gcloud", "storage", "cat", f"{content}/config.auto.tfvars.json"])
-        or "{}"
+    res = _capture(
+        ["gcloud", "storage", "cat", f"{content}/config.auto.tfvars.json"]
     )
+    if res.returncode != 0:
+      # Absent if the revision failed before Terraform ran (nothing created).
+      if "matched no objects" in (res.stderr or ""):
+        continue
+      # Any other error: stop rather than guess, since guessing wrong destroys
+      # resources the failed apply created.
+      sys.exit(
+          f"FAILED: could not read the inputs of {deployment_id} from"
+          f" {content}: {(res.stderr or '').strip()}"
+      )
+    tfvars = json.loads(res.stdout or "{}")
     if "existing" in tfvars:
       return set(tfvars["existing"] or [])
   return None
