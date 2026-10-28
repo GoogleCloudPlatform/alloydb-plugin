@@ -31,7 +31,6 @@ import threading
 from typing import Any
 
 from google.adk.models.google_llm import Gemini
-from google.adk.models.llm_response import LlmResponse
 from google.adk.tools.mcp_tool import mcp_session_manager
 from google.adk.tools.mcp_tool import mcp_toolset
 from google.adk.tools.tool_context import ToolContext
@@ -465,7 +464,16 @@ def stash_chart(
 
 
 def charts_after_model(callback_context, llm_response):
-  """after_model_callback: swaps `[[chart:N]]` tokens for inline PNG parts."""
+  """after_model_callback: swaps `[[chart:N]]` tokens for inline PNG parts.
+
+  Streamed partial chunks pass through untouched: the token may not have
+  arrived yet, and only the final response is saved to the session. Only
+  visible text is split; thought parts and non-text parts are kept as they
+  are, and a split part's `thought_signature` stays on the text after its
+  last token.
+  """
+  if getattr(llm_response, "partial", False):
+    return None
   pending = callback_context.state.get(K_CHARTS) or []
   if not pending:
     return None
@@ -480,28 +488,34 @@ def charts_after_model(callback_context, llm_response):
     )
 
   by_idx = {i + 1: c for i, c in enumerate(pending)}
-  full = "".join(getattr(p, "text", "") or "" for p in parts)
-  new_parts, last, used = [], 0, set()
-  for m in re.finditer(r"\[\[\s*chart:\s*(\d+)\s*\]\]", full):
-    c = by_idx.get(int(m.group(1)))
-    if not c:
+  new_parts, used = [], set()
+  for p in parts:
+    if p.thought or not p.text:
+      new_parts.append(p)
       continue
-    before = full[last : m.start()]
-    if before.strip():
-      new_parts.append(types.Part(text=before))
-    new_parts.append(_img(c))
-    used.add(int(m.group(1)))
-    last = m.end()
-  tail = full[last:]
-  if tail.strip():
-    new_parts.append(types.Part(text=tail))
+    last = 0
+    for m in re.finditer(r"\[\[\s*chart:\s*(\d+)\s*\]\]", p.text):
+      c = by_idx.get(int(m.group(1)))
+      if not c:
+        continue
+      before = p.text[last : m.start()]
+      if before.strip():
+        new_parts.append(types.Part(text=before))
+      new_parts.append(_img(c))
+      used.add(int(m.group(1)))
+      last = m.end()
+    tail = p.text[last:]
+    if not last:  # no token in this part
+      new_parts.append(p)
+    elif tail.strip() or p.thought_signature:
+      new_parts.append(p.model_copy(update={"text": tail}))
   for i, c in by_idx.items():
     if i not in used:
       new_parts.append(_img(c))
-  if not new_parts:
-    new_parts = [_img(c) for c in pending]
   callback_context.state[K_CHARTS] = []
-  return LlmResponse(content=types.Content(role="model", parts=new_parts))
+  return llm_response.model_copy(
+      update={"content": types.Content(role="model", parts=new_parts)}
+  )
 
 
 # =============================================================================
