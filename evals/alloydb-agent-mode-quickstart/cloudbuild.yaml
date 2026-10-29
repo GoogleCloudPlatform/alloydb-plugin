@@ -1,0 +1,183 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# CUJ 1-3 run in parallel steps (each in its own container via EVAL_SCENARIOS):
+# allow 4 hours overall — up to 45 minutes for pre-clean, up to 105 minutes for
+# the longest scenario (CUJ 1: 90m budget + scoring), and at least 1 hour for
+# teardown if a step times out.
+timeout: 14400s
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+  volumes:
+    - name: 'cb_state'
+      path: '/cb_state'
+  env:
+    # Keep HOME container-local (/root) instead of Cloud Build's shared
+    # /builder/home volume so parallel steps do not share gcloud/uv/npm state.
+    - 'HOME=/root'
+    - 'RELEASE_VERSION=pr-${_PR_NUMBER}-agent-mode-evals'
+    - 'EVAL_SUITE_DIR=/workspace/evals/alloydb-agent-mode-quickstart'
+    - 'EVAL_CONFIG=/cb_state/run_config.yaml'
+    - 'EVAL_SKILLS_DIR=/workspace/skills'
+    - 'EVAL_RESULTS_DIR=/tmp/alloydb-agent-mode-evals/results'
+    - 'EVAL_GCP_PROJECT_ID=${PROJECT_ID}'
+    - 'EVAL_GCP_PROJECT_REGION=${_TARGET_REGION}'
+    - 'GOOGLE_CLOUD_PROJECT=${PROJECT_ID}'
+    - 'EVAL_REPORTING_PROJECT=${_EVAL_REPORTING_PROJECT}'
+    - 'EVAL_REPORTING_DATASET=${_EVAL_REPORTING_DATASET}'
+    - 'EVAL_SHARED_CLUSTER=${_SHARED_CLUSTER}'
+    - 'EVAL_SHARED_POOL=${_SHARED_POOL}'
+    - 'EVAL_SHARED_DATABASE=${_SHARED_DATABASE}'
+    - 'EVAL_FOUNDATION_SUFFIX=${_FOUNDATION_SUFFIX}'
+    - 'EVAL_SHARED_VPC=${_SHARED_VPC}'
+    - 'EVAL_SHARED_SUBNET=${_SHARED_SUBNET}'
+    - 'EVAL_SHARED_ATTACHMENT=${_SHARED_ATTACHMENT}'
+    - 'CUJ1_CLUSTER=cuj1-pr${_PR_NUMBER}-cluster'
+    - 'CUJ1_PRIMARY=cuj1-pr${_PR_NUMBER}-primary'
+    - 'CUJ1_POOL=cuj1-pr${_PR_NUMBER}-pool'
+    - 'CUJ1_VPC=cuj1-pr${_PR_NUMBER}-vpc'
+    - 'CUJ1_SUBNET=cuj1-pr${_PR_NUMBER}-subnet'
+    - 'CUJ2_NAME=cuj2-pr${_PR_NUMBER}'
+    - 'CUJ3_NAME=cuj3-pr${_PR_NUMBER}'
+    - 'CUJ3_ENGINE_PREFIX=cuj3_pr${_PR_NUMBER}'
+
+# The Cloud Build trigger sets the environment-specific substitutions:
+# _EVAL_SERVER_IMAGE, _TARGET_REGION, _SHARED_CLUSTER, _SHARED_POOL,
+# _SHARED_DATABASE, _FOUNDATION_SUFFIX, _SHARED_VPC, _SHARED_SUBNET,
+# _SHARED_ATTACHMENT, _EVAL_REPORTING_PROJECT, and _EVAL_REPORTING_DATASET.
+
+steps:
+  - id: 'preclean'
+    name: '${_EVAL_SERVER_IMAGE}'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+
+        echo "Fetching PR #$_PR_NUMBER metadata from GitHub API..."
+        HTTP_STATUS=$(curl -s -o /tmp/pr_data.json -w "%{http_code}" \
+          "https://api.github.com/repos/$REPO_FULL_NAME/pulls/$_PR_NUMBER")
+
+        if [ "$$HTTP_STATUS" -ne 200 ]; then
+          echo "Error fetching PR data: HTTP $$HTTP_STATUS"
+          cat /tmp/pr_data.json
+          exit 1
+        fi
+
+        # Check if execution label is present using exact matching via jq
+        if ! jq -e '.labels | any(.name == "ci:run-evals-agent-mode")' /tmp/pr_data.json > /dev/null; then
+          echo "PR #$_PR_NUMBER does not have 'ci:run-evals-agent-mode' label. Skipping execution."
+          touch /cb_state/skip
+          exit 0
+        fi
+        echo "Execution label detected. Preparing parallel CUJ 1-3 evaluations..."
+
+        # Evaluate only the newest commit of this PR: cancel its older runs,
+        # then delete what they or an earlier timed-out run left behind (Cloud
+        # Build stops those builds before their EXIT trap can run).
+        CREATED=$(gcloud builds describe "$BUILD_ID" --project="$PROJECT_ID" --region="$LOCATION" --format='value(createTime)')
+        for OLD in $(gcloud builds list --ongoing --project="$PROJECT_ID" --region="$LOCATION" --format='value(id)' \
+            --filter="substitutions.TRIGGER_NAME='$TRIGGER_NAME' AND substitutions._PR_NUMBER='$_PR_NUMBER' AND createTime<'$$CREATED'"); do
+          echo "Cancelling older run $$OLD of PR #$_PR_NUMBER..."
+          gcloud builds cancel "$$OLD" --project="$PROJECT_ID" --region="$LOCATION"
+        done
+        echo "Cleaning up resources left by earlier runs of PR #$_PR_NUMBER (NOT_FOUND errors are expected)..."
+        bash /workspace/evals/alloydb-agent-mode-quickstart/teardown.sh
+
+        cat /workspace/evals/alloydb-agent-mode-quickstart/run_config.yaml \
+            /workspace/evals/alloydb-agent-mode-quickstart/ci_metadata.yaml \
+            > /cb_state/run_config.yaml
+
+  # allowFailure keeps sibling CUJ steps running (so each finishes scoring and
+  # runs its own teardown) if one step fails; check-results fails the build.
+  - id: 'cuj1-provision-agent-pool'
+    name: '${_EVAL_SERVER_IMAGE}'
+    waitFor: ['preclean']
+    allowFailure: true
+    env:
+      - 'EVAL_SCENARIOS=cuj1-provision-agent-pool'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        if [ -f /cb_state/skip ]; then exit 0; fi
+        trap 'bash /workspace/evals/alloydb-agent-mode-quickstart/teardown.sh' EXIT
+        cd /evalbench
+        timeout --signal=TERM 6300s ./evalbench/run.sh
+        trap - EXIT
+        touch "/cb_state/ok.$$EVAL_SCENARIOS"
+
+  - id: 'cuj2-simple-agent'
+    name: '${_EVAL_SERVER_IMAGE}'
+    waitFor: ['preclean']
+    allowFailure: true
+    env:
+      - 'EVAL_SCENARIOS=cuj2-simple-agent'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        if [ -f /cb_state/skip ]; then exit 0; fi
+        trap 'bash /workspace/evals/alloydb-agent-mode-quickstart/teardown.sh' EXIT
+        cd /evalbench
+        timeout --signal=TERM 3600s ./evalbench/run.sh
+        trap - EXIT
+        touch "/cb_state/ok.$$EVAL_SCENARIOS"
+
+  - id: 'cuj3-agent-swarm'
+    name: '${_EVAL_SERVER_IMAGE}'
+    waitFor: ['preclean']
+    allowFailure: true
+    env:
+      - 'EVAL_SCENARIOS=cuj3-agent-swarm'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        if [ -f /cb_state/skip ]; then exit 0; fi
+        trap 'bash /workspace/evals/alloydb-agent-mode-quickstart/teardown.sh' EXIT
+        cd /evalbench
+        timeout --signal=TERM 4500s ./evalbench/run.sh
+        trap - EXIT
+        touch "/cb_state/ok.$$EVAL_SCENARIOS"
+
+  - id: 'check-results'
+    name: '${_EVAL_SERVER_IMAGE}'
+    waitFor:
+      - 'cuj1-provision-agent-pool'
+      - 'cuj2-simple-agent'
+      - 'cuj3-agent-swarm'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        if [ -f /cb_state/skip ]; then exit 0; fi
+        failed=()
+        for s in cuj1-provision-agent-pool cuj2-simple-agent cuj3-agent-swarm; do
+          if [ ! -f "/cb_state/ok.$$s" ]; then
+            failed+=("$$s")
+          fi
+        done
+        if (( $${#failed[@]} )); then
+          echo "ERROR: scenario step(s) failed: $${failed[*]}" >&2
+          exit 1
+        fi
+        echo "All 3 parallel CUJ evaluation steps completed."

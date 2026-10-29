@@ -14,6 +14,7 @@
     "postgresql",
     "database"
   ],
+  "skills": "./skills/",
   "interface": {
     "displayName": "AlloyDB for PostgreSQL",
     "shortDescription": "Interact with AlloyDB for PostgreSQL instances.",
