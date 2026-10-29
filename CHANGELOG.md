@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/gemini-cli-extensions/alloydb/compare/0.2.0...0.2.1) (2026-09-23)
+
+
+### Features
+
+* **plugin:** migrate from generated skills to the prebuilt MCP server ([#169](https://github.com/gemini-cli-extensions/alloydb/issues/169)) ([00ee6ce](https://github.com/gemini-cli-extensions/alloydb/commit/00ee6ce2bcf88b46da4bf298a3ad8c0ad85877c8))
+* **plugin:** support agent plugin spec ([#167](https://github.com/gemini-cli-extensions/alloydb/issues/167)) ([9521dbb](https://github.com/gemini-cli-extensions/alloydb/commit/9521dbb4ea2d2236b36dc58bf58609d57a00a679))
+
 ## [0.2.0](https://github.com/gemini-cli-extensions/alloydb/compare/0.1.11...0.2.0) (2026-04-16)
 
 ### ⚠ BREAKING CHANGES
