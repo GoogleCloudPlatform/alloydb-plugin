@@ -81,8 +81,11 @@ def _intro_section() -> str:
         " tools."
     )
   if HAS_SCRATCH:
+    prefix = (
+        "In addition, during each session" if AGENT_POOL.url else "Each session"
+    )
     parts.append(
-        "Each session you get your OWN private scratch database"
+        f"{prefix} you get your OWN private scratch database"
         " (agent_db_<uuid>) inside this deployment's dedicated Agent Workspace"
         " — reachable only through your tools, created on demand and destroyed"
         " when you're done. Other sessions can never see or touch it."
