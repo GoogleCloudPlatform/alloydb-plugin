@@ -15,9 +15,12 @@
 # The router is a plain Python MCP server: it talks to the PostgreSQL sidecar
 # directly (psycopg), one connection per call as the calling session's role.
 FROM python:3.12-slim
+RUN groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid 10001 --create-home app
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY server.py .
 ENV PORT=8080
+USER 10001:10001
 CMD ["python", "server.py"]

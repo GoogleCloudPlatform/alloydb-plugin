@@ -189,7 +189,12 @@ resource "google_cloud_run_v2_service" "db" {
     containers {
       name  = "postgres"
       image = var.postgres_image
-      args  = ["postgres", "-c", "max_connections=300", "-c", "google_columnar_engine.enabled=off"]
+      args = [
+        "postgres",
+        "-c", "max_connections=300",
+        "-c", "google_columnar_engine.enabled=off",
+        "-c", "temp_file_limit=512MB",
+      ]
 
       env {
         name  = "POSTGRES_DB"

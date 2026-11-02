@@ -20,7 +20,7 @@ uniform "create-if-missing, delete-only-what-we-created" ownership model
 (`existing` set variable/output, zero `imports.tf`):
   1. `alloydb-agent-project` (`assets/terraform/project`) — shared project
      APIs, VPC, subnet, PSC endpoint, private `*.run.app` DNS, network
-     attachment, service-agent/Cloud Build IAM, staging bucket, and the
+     attachment, Vertex AI service-agent IAM, staging bucket, and the
      `alloydb-agent` Artifact Registry repository. Any resource that already
      exists before deployment is recorded in `existing` (`count = 0`) and left
      untouched on `--delete-policy=DELETE`; any resource missing before
@@ -88,15 +88,10 @@ RUNNER_ROLES = (
     "roles/secretmanager.admin",
     "roles/run.admin",
     "roles/iam.serviceAccountUser",
+    "roles/logging.logWriter",
 )
 
 VERTEX_AGENT_ROLES = ("roles/compute.networkAdmin", "roles/dns.peer")
-CLOUDBUILD_ROLES = (
-    "roles/cloudbuild.builds.builder",
-    "roles/cloudbuild.builds.editor",
-    "roles/storage.admin",
-    "roles/artifactregistry.writer",
-)
 AGENT_ROLES = (
     "roles/aiplatform.user",
     "roles/alloydb.databaseUser",
@@ -324,9 +319,6 @@ class ProjectBootstrapper:
     vertex_sa = f"service-{num}@gcp-sa-aiplatform.iam.gserviceaccount.com"
     if set(VERTEX_AGENT_ROLES) <= sa_roles.get(vertex_sa, set()):
       current.add("aiplatform_iam")
-    cb_sa = f"{num}-compute@developer.gserviceaccount.com"
-    if set(CLOUDBUILD_ROLES) <= sa_roles.get(cb_sa, set()):
-      current.add("cloudbuild_iam")
 
     prev = _get_deployment_existing(project, region, deployment_id)
     existing = sorted(current if prev is None else (current & prev))
@@ -387,12 +379,16 @@ class WorkspaceDeployer:
         )
         build_cfg = pathlib.Path(fh.name)
       try:
+        runner_ref = f"projects/{project}/serviceAccounts/{self.cfg.runner_sa}"
+        staging_dir = f"{self.cfg.staging_bucket}/cloudbuild-source"
         _run([
             "gcloud",
             "builds",
             "submit",
             str(ROUTER_SERVICE_SRC),
             f"--config={build_cfg}",
+            f"--service-account={runner_ref}",
+            f"--gcs-source-staging-dir={staging_dir}",
             f"--project={project}",
         ])
       finally:
@@ -688,8 +684,8 @@ class DeploymentConfig:
     print(f"==> Resolved Agent Workspace ({service}): {url}", flush=True)
     return url
 
-  def primary_endpoint(self) -> dict[str, str]:
-    """Resolves primary database endpoint metadata from `database:` config."""
+  def agent_pool_endpoint(self) -> dict[str, str]:
+    """Resolves AlloyDB Agent Pool endpoint metadata from `database:` config."""
     if not (self.cluster and self.instance):
       return {"url": "", "ca_pem": ""}
     return {

@@ -59,7 +59,7 @@ def main() -> None:
     sys.exit(f"==> {len(errors)} error(s); fix the config before step 2.")
 
   print(
-      "==> Topology: primary=direct (AlloyDB Agent Pool), "
+      "==> Topology: agent_pool=direct (AlloyDB Agent Pool), "
       + (
           "agent_workspace=yes (per-session scratch databases), "
           if cfg.agent_workspace

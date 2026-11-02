@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""ADK data agent over a read-only primary database and optional scratch DB.
+"""ADK data agent over a shared read-only database and optional scratch DB.
 
 Each session can also provision a DEDICATED scratch database inside the
 deployment's shared Agent Workspace service.
 
-Primary database (read-only system of record):
+Shared database (read-only system of record):
   * `execute_sql_read_only` / `get_schema` — mounted DIRECT from the AlloyDB
     Agent Pool over MCP (AlloyDB IAM auth as the runtime's service account).
 
@@ -31,24 +31,23 @@ Workspace picks this session's database. The agent keeps no database state.
 
 Configuration comes from environment variables set by deploy_agent.py:
   AGENT_MODEL, AGENT_NAME, AGENT_WORKSPACE_URL, AGENT_CONTEXT,
-  PRIMARY_DB_URL / _NAME / _USER / _CA_PEM.
+  AGENT_POOL_URL / _DB_NAME / _USER / _CA_PEM.
 """
 
 from typing import Any
 
 from google.adk.agents import Agent
-from google.adk.tools.tool_context import ToolContext
 import utility  # bundled alongside this module (see deploy_agent.py)
 
 # --- Deployment CAPABILITIES (single source of truth for tools & prompt) -----
-PRIMARY = utility.PrimaryDB.from_env()
+AGENT_POOL = utility.AgentPoolDB.from_env()
 AGENT_WORKSPACE_URL = utility.env_str("AGENT_WORKSPACE_URL").rstrip("/")
 HAS_SCRATCH = bool(AGENT_WORKSPACE_URL)
 
 AGENT_NAME = utility.agent_name(utility.env_str("AGENT_NAME"), "database_agent")
 
 # execute_sql_read_only / get_schema, direct from the Agent Pool.
-_POOL_TOOLSET = utility.pool_toolset(PRIMARY) if PRIMARY.url else None
+_POOL_TOOLSET = utility.pool_toolset(AGENT_POOL) if AGENT_POOL.url else None
 # scratch_* tools on THIS session's database in the Agent Workspace.
 _SCRATCH_TOOLSET = (
     utility.workspace_toolset(AGENT_WORKSPACE_URL) if HAS_SCRATCH else None
@@ -62,77 +61,44 @@ _CHART_NOTE = (
     "NEVER begin your reply with the chart: write a one-line lead-in "
     "BEFORE this token, then the chart, then your analysis/takeaway."
 )
+render_chart = utility.make_render_chart(_CHART_NOTE)
 
-
-async def render_chart(  # pylint: disable=g-bare-generic
-    kind: str,
-    title: str,
-    x: list,
-    series: dict,
-    caption: str = "",
-    drilldowns: list | None = None,
-    tool_context: ToolContext = None,
-) -> dict[str, Any]:
-  """Renders a chart of data you already have as an inline image in your reply.
-
-  Args:
-    kind: Chart type: "line" (time series / trends), "bar" (one ranked/compared
-      series), or "grouped_bar" (2+ series compared across the same categories).
-    title: Chart title.
-    x: Axis labels (months, DCs, categories...). Keep under ~200 points —
-      aggregate first.
-    series: Mapping of `{"series name": [numbers aligned with x]}`.
-    caption: Optional caption rendered below the chart.
-    drilldowns: Up to 3 follow-up questions worth offering.
-    tool_context: ADK tool context (supplied automatically).
-
-  Returns:
-    A dict containing a `placeholder` token — put it on its own line in your
-    reply where the chart should appear (it becomes the inline image); add a
-    one-line takeaway near it. Do NOT write a markdown image/link.
-  """
-  return utility.stash_chart(
-      tool_context,
-      utility.render_b64(kind, title, x, series, caption, drilldowns),
-      _CHART_NOTE,
-  )
-
-
-tools: list[Any] = []
+tools: list[Any] = [render_chart]
 # Each MCP server tool becomes its own agent tool, described by the server's
 # own schema.
 if _POOL_TOOLSET is not None:
   tools.append(_POOL_TOOLSET)
 if _SCRATCH_TOOLSET is not None:
   tools.append(_SCRATCH_TOOLSET)
-tools.append(render_chart)
 
 
 def _intro_section() -> str:
-  if HAS_SCRATCH:
-    return (
-        "You are a data-analytics agent. Each session you get your OWN private"
-        " scratch database (agent_db_<uuid>) inside this deployment's"
-        " dedicated Agent Workspace — reachable only through your tools,"
-        " created on demand and destroyed when you're done. Other sessions can"
-        " never see or touch it."
+  parts = ["You are a data-analytics agent."]
+  if AGENT_POOL.url:
+    parts.append(
+        "You answer questions about a shared read-only database using your"
+        " tools."
     )
-  return (
-      "You are a data-analytics agent. You answer questions about a shared "
-      "read-only database using your tools."
-  )
+  if HAS_SCRATCH:
+    parts.append(
+        "Each session you get your OWN private scratch database"
+        " (agent_db_<uuid>) inside this deployment's dedicated Agent Workspace"
+        " — reachable only through your tools, created on demand and destroyed"
+        " when you're done. Other sessions can never see or touch it."
+    )
+  return " ".join(parts)
 
 
-def _primary_section() -> str:
-  if not PRIMARY.url:
+def _pool_section() -> str:
+  if not AGENT_POOL.url:
     return ""
   return (
-      "You have read-only access to the shared PRIMARY database — the"
+      "You have read-only access to the shared AlloyDB database — the"
       " organization's system of record:\n1. Call `get_schema` FIRST to learn"
       " the tables, columns, and types.\n2. Then answer with"
       " `execute_sql_read_only` — SELECT-only; keep result sets small"
       " (GROUP BY / LIMIT); statements time out at 60s.\n3. Never pass"
-      " `database`; it is supplied automatically.\nThe primary database is"
+      " `database`; it is supplied automatically.\nThe shared database is"
       " enforced read-only: never attempt writes."
   )
 
@@ -156,17 +122,17 @@ def _scratch_flow_section() -> str:
   if not HAS_SCRATCH:
     return ""
   return (
-      "Scratch-database flow (for what-if work the read-only primary cannot"
-      " do):\n1. `scratch_provision_database` first (a few seconds); its"
-      " returned name confirms your private database.\n2. It starts EMPTY."
-      " Use `scratch_execute_sql` to run any SQL in it — CREATE TABLE, INSERT"
-      " the rows you read from the primary, UPDATE, SELECT — and"
-      " `scratch_get_schema` to see what you have built. These tools only ever"
-      " touch YOUR scratch database, never the primary. Primary-only work"
-      " needs none of this.\n3. When the user is done, offer to"
-      " `scratch_release_database`. If a scratch tool says this session has"
-      " no scratch database, it was reaped or the service was recycled — say"
-      " so, re-provision, and rebuild."
+      "Scratch-database flow (for what-if work the shared read-only database"
+      " cannot do):\n1. `scratch_provision_database` first (this will take a"
+      " few seconds); its returned name confirms your private database.\n2. It"
+      " starts EMPTY. Use `scratch_execute_sql` to run any SQL in it — CREATE"
+      " TABLE, INSERT the rows you read from the shared database, UPDATE,"
+      " SELECT — and `scratch_get_schema` to see what you have built. These"
+      " tools only ever touch YOUR scratch database, never the shared"
+      " database. Read-only work needs none of this.\n3. When the user is"
+      " done, offer to `scratch_release_database`. If a scratch tool says this"
+      " session has no scratch database, it was reaped or the service was"
+      " recycled — say so, re-provision, and rebuild."
   )
 
 
@@ -178,7 +144,7 @@ _INSTRUCTION = "\n\n".join(
             "Use it to interpret questions, map business terms to the data,"
             " and explain results in the business's own language."
         ),
-        _primary_section(),
+        _pool_section(),
         _charts_section(),
         _scratch_flow_section(),
         "Never claim results a query did not return; always show the numbers.",
@@ -192,7 +158,7 @@ root_agent = Agent(
         model=utility.env_str("AGENT_MODEL", "gemini-3.8-flash")
     ),
     after_model_callback=utility.charts_after_model,
-    before_tool_callback=utility.bind_database(PRIMARY.database),
+    before_tool_callback=utility.bind_database(AGENT_POOL.database),
     instruction=utility.StaticInstruction(_INSTRUCTION),
     tools=tools,
 )

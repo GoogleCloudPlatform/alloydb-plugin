@@ -26,26 +26,35 @@ the list. Afterwards, confirm that each one is gone (`TEARDOWN PASS` for step 1,
 or a `describe` that returns `NOT_FOUND` for the resource itself) before
 reporting the teardown as complete.
 
-1.  **Per-deployment resources (`<name>`):** one command finds and deletes
-    everything Steps 2-5 created for `<name>`, in dependency order: Gemini
-    Enterprise registrations (when `gemini_enterprise.app_id` is set), the Agent
-    Engines (`force=True`, which releases the PSC network attachment), the
-    per-deployment stack (the SA, its IAM bindings and, with `workspace: true`,
-    the Cloud Run service and its secrets), and the AlloyDB IAM database user
-    that Step 2 creates outside Terraform:
+1.  **Per-deployment resources (`<name>`):** `deploy_agent.py teardown` finds
+    and deletes everything Steps 2–5 created for `<name>`, in dependency order:
+    Gemini Enterprise registrations (when `gemini_enterprise.app_id` is set),
+    the Agent Engines (`force=True`, which releases the PSC network attachment),
+    the per-deployment stack (the SA, its IAM bindings and, with
+    `workspace: true`, the Cloud Run service and its secrets), and the AlloyDB
+    IAM database user that Step 2 creates outside Terraform.
+
+    First, run the dry-run preview (lists what exists for `<name>` and deletes
+    nothing):
 
     ```bash
-    # Lists what exists for <name> and deletes nothing:
     .venv/bin/python "<skill>"/scripts/deploy_agent.py teardown --config <config_path>
-    # Only after the user confirms that list: delete it, then verify
+    ```
+
+    Show that list to the user and **end your turn** to wait for confirmation.
+    Only after the user confirms the list, run the deletion and post-teardown
+    verification:
+
+    ```bash
     .venv/bin/python "<skill>"/scripts/deploy_agent.py teardown --config <config_path> --yes
     ```
 
     It finds the resources by `name`, so a partial deployment or an edited
     config still tears down cleanly, and it never touches the shared foundation,
-    the network, or the pool. It waits for each deletion before the next and
-    prints `TEARDOWN PASS` only after checking that nothing is left. On
-    `TEARDOWN FAIL`, fix the cause and re-run; finished steps are skipped.
+    the network, the agent pool, or the AlloyDB cluster. It waits for each
+    deletion before the next and prints `TEARDOWN PASS` only after checking that
+    nothing is left. On `TEARDOWN FAIL`, fix the cause and re-run; finished
+    steps are skipped.
 
 2.  **Shared project foundation (`alloydb-agent-project<name_suffix>`, only
     after all per-deployment stacks and Agent Engines are removed):**
@@ -60,42 +69,84 @@ reporting the teardown as complete.
     by Step 2 while preserving pre-existing VPCs, subnets, buckets, Artifact
     Registry repos, and IAM bindings.
 
-3.  **AlloyDB agent pool and cluster (Step P, only if created by this skill):**
-    First, list the exact Step P resources to be deleted (`<pool>`,
-    `alloydb-agents-<vpc>`, `<cluster>`, `<subnet>`, `<vpc>`) in your reply and
+3.  **AlloyDB agent pool (`<pool>`, only if created by Step P):**
+    Deleting `<pool>` removes only the `AGENT_POOL` instance (plus its PSC
+    endpoint and private `alloydb.goog.` DNS zone) and leaves `<cluster>`,
+    `<primary>`, and all user data untouched. **Never delete `<cluster>` or
+    `<primary>` as part of agent or agent-pool teardown.**
+
+    First, list the exact Step P resources you plan to delete in your reply and
     **end your turn** to wait for the user's confirmation before running any
     delete command. Once confirmed, run **after** `alloydb-agent-project` is
     deleted:
 
     ```bash
-    # 1. Agent pool (also removes its PSC endpoint and private alloydb.goog. DNS zone)
     gcloud beta alloydb instances delete <pool> \
         --project=<project_id> --region=<region> --cluster=<cluster> --quiet
+    ```
 
-    # 2. Service connection policy, once the pool's PSC endpoint is gone (this
-    #    list prints nothing)
-    gcloud compute forwarding-rules list --project=<project_id> \
-        --filter='network~/<vpc>$' --format='value(name)'
-    gcloud network-connectivity service-connection-policies delete alloydb-agents-<vpc> \
-        --project=<project_id> --region=<region> --quiet
+    If `<cluster>` is being kept (the normal case), confirm `<pool>` is gone
+    (`NOT_FOUND`):
 
-    # 3. Optional: AlloyDB cluster (deletes primary instance and database users)
+    ```bash
+    gcloud beta alloydb instances describe <pool> \
+        --project=<project_id> --region=<region> --cluster=<cluster>
+    ```
+
+    Deleting a pool blocks creating a new pool on the same cluster until backend
+    cleanup completes.
+
+4.  **Optional — Newly created test AlloyDB cluster (`<cluster>`, destructive;
+    separate explicit request and confirmation required):**
+
+    > **Warning — permanent data loss:** Deleting `<cluster>` with `--force`
+    > permanently destroys the cluster, its `<primary>` instance, all databases,
+    > data, and database users.
+
+    -   **Never touch an existing cluster:** If `<cluster>` already existed
+        before Step P (i.e., P.2b was used), **skip this step completely**—never
+        propose or run `clusters delete`, even if the user asks to tear down
+        everything created by this skill. Leave `<cluster>` and `<primary>`
+        untouched and confirm to the user that their cluster was preserved.
+    -   **Strict gating for newly created test clusters:** Include this step
+        **only** when `<cluster>` was newly created in Step P for a trial
+        **and** the user explicitly asks to delete the cluster itself (or to
+        delete everything created during that scratch trial). Before running the
+        command, warn the user clearly about permanent data loss on `<cluster>`
+        and `<primary>`, name `<cluster>` explicitly in your confirmation list,
+        and **end your turn** to wait for user approval (the user can also run
+        the command without `--quiet` in their own terminal if they prefer an
+        interactive prompt).
+    -   Once approved, run **after** `<pool>` is deleted (Step 3) and **before**
+        deleting `<subnet>` and `<vpc>` (Step 5), then verify `NOT_FOUND`:
+
+    ```bash
     gcloud beta alloydb clusters delete <cluster> \
         --project=<project_id> --region=<region> --force --quiet
 
-    # 4. Optional: Step P subnet and VPC
+    gcloud beta alloydb clusters describe <cluster> \
+        --project=<project_id> --region=<region>
+    ```
+
+5.  **Optional — Dedicated Step P network (`alloydb-agents-<vpc>`, `<subnet>`,
+    `<vpc>`, only if created by Step P and nothing else uses `<vpc>`):**
+    Once `<pool>` is deleted (so its PSC forwarding rule on `<vpc>` is gone) and
+    no other cluster or workload uses `<vpc>`, delete the service connection
+    policy, subnet, and VPC, then verify each `describe` returns `NOT_FOUND`:
+
+    ```bash
+    # Confirm no PSC forwarding rules remain on <vpc> (prints nothing)
+    gcloud compute forwarding-rules list --project=<project_id> \
+        --filter='network~/<vpc>$' --format='value(name)'
+
+    gcloud network-connectivity service-connection-policies delete alloydb-agents-<vpc> \
+        --project=<project_id> --region=<region> --quiet
     gcloud compute networks subnets delete <subnet> \
         --project=<project_id> --region=<region> --quiet
     gcloud compute networks delete <vpc> \
         --project=<project_id> --quiet
-    ```
 
-    Then run the verification checks below and confirm each `describe` returns
-    `NOT_FOUND` before reporting teardown complete:
-
-    ```bash
-    gcloud beta alloydb clusters describe <cluster> \
-        --project=<project_id> --region=<region>
+    # Verify NOT_FOUND for each deleted network resource
     gcloud network-connectivity service-connection-policies describe alloydb-agents-<vpc> \
         --project=<project_id> --region=<region>
     gcloud compute networks subnets describe <subnet> \
@@ -114,5 +165,3 @@ reporting the teardown as complete.
               --filter='network~/<vpc>$' --format='value(name)')
         gcloud compute networks delete <vpc> --project=<project_id> --quiet
         ```
-    -   Deleting a pool blocks creating a new pool on the same cluster until
-        backend cleanup completes.

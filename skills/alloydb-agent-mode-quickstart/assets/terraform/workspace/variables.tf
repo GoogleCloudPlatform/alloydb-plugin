@@ -50,7 +50,7 @@ variable "subnet" {
 
 variable "postgres_image" {
   type        = string
-  default     = "gcr.io/alloydb-omni/alloydbomni:16"
+  default     = "gcr.io/alloydb-omni/alloydbomni:18"
   description = "Container image for the Scratch DB sidecar."
 }
 

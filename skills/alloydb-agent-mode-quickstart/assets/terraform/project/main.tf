@@ -48,8 +48,6 @@ provider "google-beta" {
   region  = var.region
 }
 
-data "google_project" "this" {}
-
 # ---- APIs -------------------------------------------------------------------
 resource "google_project_service" "apis" {
   for_each = toset([
@@ -189,7 +187,7 @@ resource "google_compute_network_attachment" "psc" {
   depends_on            = [time_sleep.apis_ready]
 }
 
-# ---- Vertex AI service agent & Cloud Build ----------------------------------
+# ---- Vertex AI service agent ------------------------------------------------
 resource "google_project_service_identity" "aiplatform" {
   provider   = google-beta
   project    = var.project_id
@@ -205,19 +203,6 @@ resource "google_project_iam_member" "aiplatform_agent" {
   project = var.project_id
   role    = each.value
   member  = "serviceAccount:${google_project_service_identity.aiplatform.email}"
-}
-
-resource "google_project_iam_member" "cloudbuild" {
-  for_each = contains(var.existing, "cloudbuild_iam") ? toset([]) : toset([
-    "roles/cloudbuild.builds.builder",
-    "roles/cloudbuild.builds.editor",
-    "roles/storage.admin",
-    "roles/artifactregistry.writer",
-  ])
-  project    = var.project_id
-  role       = each.value
-  member     = "serviceAccount:${data.google_project.this.number}-compute@developer.gserviceaccount.com"
-  depends_on = [time_sleep.apis_ready]
 }
 
 # ---- Shared project storage + container registry ----------------------------

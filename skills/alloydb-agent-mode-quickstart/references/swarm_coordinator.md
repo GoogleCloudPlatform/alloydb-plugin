@@ -11,7 +11,12 @@ entry-point engine (`<name>_swarm_coordinator` when `coordinator` is configured,
 otherwise `<name>_agent`) and creates or patches its `adkAgentDefinition` in
 Discovery Engine (`v1alpha`) with `sharingConfig.scope: ALL_USERS`.
 
-**Required setup:**
+### Prerequisites (verify only — do not provision or modify)
+
+Treat the items below as pre-existing environment prerequisites. Only check
+whether they are met and report any missing prerequisite to the user—do **not**
+attempt to activate subscriptions, modify organization Identity Provider
+(`AclConfig`) settings, or assign user seat licenses on the user's behalf:
 
 -   **Subscription:** Active Gemini Enterprise subscription or 30-day free trial
     on the billing account.

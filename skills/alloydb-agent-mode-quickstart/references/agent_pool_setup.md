@@ -8,9 +8,18 @@ one, either on a **new** cluster or by enabling agent mode on the user's
 has a pool in `READY`, skip this file and go to
 [the hand-off](#hand-off-to-the-workflow).
 
-These are plain `gcloud` commands, not scripts. Once the user provides the
-settings below, briefly explain the provisioning sequence and total expected
-time (~15–30 min), then run the commands one at a time—explaining what each step
+These steps use `gcloud` (and, when configured in this plugin, the
+`alloydb-postgres` MCP server), not standalone scripts. Where both MCP and
+`gcloud` apply—such as inspecting an existing cluster or primary instance
+(`get_cluster`, `list_instances`, `get_instance`) or loading SQL schemas/seed
+data (`execute_sql`, `list_tables`) when `<PRIMARY>` is network-reachable—prefer
+MCP if configured and let the user know MCP is an option, while noting that MCP
+in the plugin may not be configured yet (`ALLOYDB_POSTGRES_*`) and falling back
+to `gcloud` when unconfigured. Agent Mode flags (`--enable-agent-mode`,
+`AGENT_POOL`, `agentPoolInfo.dnsName`), VPC/PSC networking, `--database-flags`
+updates, and Cloud Storage `clusters import` always use `gcloud`. Once the user
+provides the settings below, briefly explain the provisioning sequence and total
+expected time (~15–30 min), then run each step one at a time—explaining what it
 does and how long it takes before running it—and stop on any failure. Everything
 after the pool (service account, network attachment, agent code, deploy, test,
 publish) is handled by the workflow steps in [SKILL.md](../SKILL.md).
@@ -19,7 +28,9 @@ publish) is handled by the workflow steps in [SKILL.md](../SKILL.md).
 
 Collect any missing values in a single plain-text reply and **end your turn** to
 wait for the user's answer (never invent resource names, passwords, or network
-settings if an interactive question tool is skipped):
+settings if an interactive question tool is skipped; if `ALLOYDB_POSTGRES_*`
+values are already configured in the environment, ask the user to confirm before
+reusing them):
 
 -   **New or existing cluster:** create a new cluster, or enable agent mode on
     one the user already runs (P.2b, which skips `<DB_PASSWORD>` and P.3).
@@ -30,11 +41,15 @@ settings if an interactive question tool is skipped):
 -   **`<CLUSTER>`:** AlloyDB cluster ID (`database.cluster`, e.g.
     `cluster-demo`).
 -   **`<PRIMARY>`:** primary instance ID (e.g. `primary-demo`). For a new
-    cluster, also ask for its size (`<CPU_COUNT>`, `<AVAILABILITY>`): `8` and
-    `REGIONAL` for production, or `2` and `ZONAL` for a trial.
+    cluster, also ask for its vCPU count (`<CPU_COUNT>`, e.g. `2`, `4`, `8`, or
+    higher) and availability type (`<AVAILABILITY>`: `ZONAL` or `REGIONAL`).
 -   **`<POOL>`:** agent pool instance ID (`database.instance`, e.g.
     `pool-demo`).
--   **`<DB_PASSWORD>` (new cluster only):** initial `postgres` password.
+-   **`<DB_PASSWORD>` (new cluster only):** initial `postgres` password (needed
+    when connecting directly as `postgres`, e.g. in AlloyDB Studio; if the user
+    prefers not to enter a password in chat, they can run the `clusters create`
+    command in P.2 directly in their own terminal and let you continue from the
+    primary instance creation).
 -   **`<VPC>` and `<SUBNET>`:** dedicated network and subnet (`vpc.network` and
     `vpc.subnet`, e.g. `agents-vpc`, `agents-subnet`).
 
@@ -85,8 +100,12 @@ gcloud beta alloydb instances create <PRIMARY> \
     --database-flags=alloydb.iam_authentication=on
 ```
 
--   `--enable-agent-mode` exists only in `beta`/`alpha`. An "unrecognized
-    arguments" error means `gcloud components update`.
+-   `--enable-agent-mode` is currently available only in the `beta` (and
+    `alpha`) track of recent Google Cloud SDK releases. If `gcloud beta alloydb
+    clusters create` fails with `unrecognized arguments: --enable-agent-mode`,
+    the local Google Cloud SDK installation is outdated—update it by running
+    `gcloud components update` (or upgrading the system `google-cloud-cli`
+    package) and retry.
 -   `alloydb.iam_authentication=on` is what lets the agent log in as its
     service account. Step 2 creates that `IAM_BASED` database user.
 -   Agent mode provisions in the background and stays `PROVISIONING` until the
@@ -101,9 +120,9 @@ gcloud beta alloydb clusters describe <CLUSTER> \
 
 ## P.2b Or: enable agent mode on an existing cluster
 
-Use this instead of P.2 when the user already runs an AlloyDB cluster. It is a
-live operation: the primary stays online, with no restart and no dropped
-connections.
+Use this instead of P.2 when the user already runs an AlloyDB cluster. Enabling
+agent mode on the cluster itself is a live operation: the primary stays online,
+with no restart and no dropped connections.
 
 ```bash
 gcloud beta alloydb clusters update <CLUSTER> \
@@ -113,13 +132,23 @@ gcloud beta alloydb clusters update <CLUSTER> \
 
 -   Then wait for `agentModeInfo.state` = `ACTIVE` with the same `describe`
     as in P.2, and do P.4 meanwhile.
--   The agent logs in as its service account, so the primary needs
-    `alloydb.iam_authentication=on`. Check its flags first (`gcloud alloydb
-    instances describe <PRIMARY> --project=<PROJECT> --region=<REGION>
-    --cluster=<CLUSTER> --format='value(databaseFlags)'`). If the flag is
-    missing, **ask before adding it**: `--database-flags` on `instances update`
-    replaces the whole flag set, so pass the existing flags too, and the update
-    may restart the primary.
+-   The agent authenticates as its service account, so `<PRIMARY>` must have
+    `alloydb.iam_authentication=on`. Inspect `<PRIMARY>`'s current flags first
+    (via the AlloyDB MCP `get_instance` / `list_pg_settings` tools if
+    configured, or `gcloud alloydb instances describe <PRIMARY>
+    --project=<PROJECT> --region=<REGION> --cluster=<CLUSTER>
+    --format='value(databaseFlags)'`).
+-   **Solicit explicit user approval before updating `<PRIMARY>` flags (may
+    restart the primary):** Updating `--database-flags` with `gcloud alloydb
+    instances update` **may restart `<PRIMARY>` and briefly interrupt active
+    database connections**, and `--database-flags` **replaces the entire flag
+    set** (any existing flag omitted from the command is cleared). If
+    `alloydb.iam_authentication=on` is missing, **do not run `instances update`
+    yet**: warn the user clearly that applying the flag may restart `<PRIMARY>`
+    and briefly drop active connections, show the exact merged
+    `--database-flags=alloydb.iam_authentication=on,<EXISTING_FLAGS>` command
+    you will run, **end your turn**, and execute `gcloud alloydb instances
+    update` only after the user explicitly approves.
 -   Skip P.3; the user's own database becomes `database.database`.
 
 ## P.3 Load data (optional)
@@ -128,8 +157,22 @@ A new cluster starts with an empty `postgres` database, which is enough to
 provision the pool and pass Step 4 (`deploy_agent.py validate`). Skip this step
 unless the user wants to load SQL data now.
 
-To import a `.sql` or `.sql.gz` file from Cloud Storage once `<PRIMARY>` is
-`READY` and no other cluster operation is running (for example, after P.6):
+When the user wants to load SQL schemas or seed data once `<PRIMARY>` is `READY`
+and no other cluster operation is running (for example, after P.6), two options
+are available—let the user know both exist:
+
+1.  **AlloyDB MCP (`execute_sql`, for small DDL/seed statements when configured
+    and network-reachable):** If this plugin's `alloydb-postgres` MCP server is
+    configured (`ALLOYDB_POSTGRES_*` pointing at `<CLUSTER>` / `<PRIMARY>`, and
+    the client can reach `<PRIMARY>` via Public IP or from inside `<VPC>` with
+    `ALLOYDB_POSTGRES_IP_TYPE=PSC` or `PRIVATE`), you can execute schema DDL and
+    small SQL statements directly with `execute_sql` and verify with
+    `list_tables`. Note to the user that MCP in the plugin may not be configured
+    yet—especially right after creating a new PSC-only cluster in P.2—so if MCP
+    is unconfigured or cannot reach `<PRIMARY>` over the network, use the Cloud
+    Storage import below (or **AlloyDB Studio**).
+2.  **Cloud Storage import (`gcloud`, for `.sql` / `.sql.gz` dumps or when MCP
+    is unconfigured / outside the VPC):**
 
 ```bash
 gcloud alloydb clusters import <CLUSTER> \
@@ -144,8 +187,9 @@ gcloud alloydb clusters import <CLUSTER> \
 -   `gcloud` has no `alloydb databases create` command. Pass
     `--database=postgres` when the SQL file creates and switches to its own
     database (`COMMIT;` first to exit `clusters import`'s implicit transaction,
-    then `CREATE DATABASE` and `\connect <DB>`), or create `<DB>` in **AlloyDB
-    Studio** first and pass `--database=<DB>`.
+    then `CREATE DATABASE` and `\connect <DB>`), or create `<DB>` first (via
+    AlloyDB MCP `execute_sql` if configured and reachable, or in **AlloyDB
+    Studio**) and pass `--database=<DB>`.
 
 ## P.4 Prepare the network
 

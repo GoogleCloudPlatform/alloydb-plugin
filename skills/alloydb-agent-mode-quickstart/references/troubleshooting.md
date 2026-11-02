@@ -68,9 +68,9 @@
 -   **`AlloyDB IAM user authentication failed`:** Agent SA lacks
     `roles/serviceusage.serviceUsageConsumer` or `roles/alloydb.databaseUser`;
     re-run Step 2 and wait a few minutes for IAM propagation.
--   **401/403 on every primary call:** Missing `IAM_BASED` database user, or the
-    primary lacks `alloydb.iam_authentication=on`; re-run Step 2 and check the
-    primary's database flags.
+-   **401/403 on every agent pool call:** Missing `IAM_BASED` database user, or
+    the primary lacks `alloydb.iam_authentication=on`; re-run Step 2 and check
+    the primary's database flags.
 -   **`pg_hba.conf rejects connection`:** The IAM database user has
     `alloydbsuperuser` or another admin role; reset roles with `gcloud alloydb
     users set-roles agent-<name>@<PROJECT>.iam --cluster=<CLUSTER>
