@@ -92,8 +92,8 @@ if selected cuj1-provision-agent-pool; then
 
   # 2. CUJ 1 AlloyDB resources. CUJ 1's agent deletes everything it created as
   #    the last part of the scenario; steps 2-3 remove whatever a failed run left
-  #    behind. Delete the pool first, as the skill's teardown guide does, then
-  #    the cluster (`--force` also deletes the primary instance).
+  #    behind. Delete the pool first, then force-delete the cluster so CI cleanup
+  #    also removes any remaining primary or read-pool instances.
   gcloud beta alloydb instances delete "${CUJ1_POOL}" --cluster="${CUJ1_CLUSTER}" \
     --project="${PROJECT}" --region="${REGION}" --quiet
   gcloud beta alloydb clusters delete "${CUJ1_CLUSTER}" \

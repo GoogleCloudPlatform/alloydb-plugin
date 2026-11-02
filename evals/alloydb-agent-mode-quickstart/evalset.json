@@ -18,7 +18,7 @@
         "The agent created `${CUJ1_POOL}` as an `AGENT_POOL` instance with PSC auto-connections to `${CUJ1_VPC}`, and reported it `READY` with its `agentPoolInfo.dnsName` (ending in `.alloydb.goog.`).",
         "The agent deployed no agents: it did not run `bootstrap_env.sh`, `validate_config.py`, `deploy_infra.py`, or `deploy_agent.py`.",
         "In the turn where the user first asked for the teardown, the agent ran no delete command: it listed the resources it would delete and asked for confirmation, and it deleted them only after the user approved in a later turn, and it deleted only resources it created in this conversation (plus firewall rules that block deleting `${CUJ1_VPC}`).",
-        "The agent deleted `${CUJ1_POOL}` first and waited for that to finish, then deleted `${CUJ1_CLUSTER}` with `--force` (which also removes `${CUJ1_PRIMARY}`) and service connection policy `alloydb-agents-${CUJ1_VPC}` in either order, then `${CUJ1_SUBNET}`, and finally `${CUJ1_VPC}` (after deleting any firewall rules that block it).",
+        "The agent deleted `${CUJ1_POOL}` first and waited for that to finish, then deleted `${CUJ1_PRIMARY}` followed by `${CUJ1_CLUSTER}` (without `--force`) and service connection policy `alloydb-agents-${CUJ1_VPC}` in either order, then `${CUJ1_SUBNET}`, and finally `${CUJ1_VPC}` (after deleting any firewall rules that block it).",
         "Before reporting that teardown is complete, the agent ran a describe or list command for `${CUJ1_CLUSTER}` (which contains its instances), `alloydb-agents-${CUJ1_VPC}`, `${CUJ1_SUBNET}`, and `${CUJ1_VPC}`, and reported that all of the deleted resources are gone."
       ],
       "kind": "live",
