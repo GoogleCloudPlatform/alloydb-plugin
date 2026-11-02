@@ -73,6 +73,7 @@ if _SCRATCH_TOOLSET is not None:
 
 
 def _intro_section() -> str:
+  """Builds the opening role and capability summary for the agent."""
   parts = ["You are a data-analytics agent."]
   if AGENT_POOL.url:
     parts.append(
@@ -90,6 +91,7 @@ def _intro_section() -> str:
 
 
 def _pool_section() -> str:
+  """Builds prompt instructions for querying the read-only AlloyDB Agent Pool."""
   if not AGENT_POOL.url:
     return ""
   return (
