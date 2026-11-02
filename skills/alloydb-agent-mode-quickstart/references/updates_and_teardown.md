@@ -99,30 +99,36 @@ reporting the teardown as complete.
 4.  **Optional — Newly created test AlloyDB cluster (`<cluster>`, destructive;
     separate explicit request and confirmation required):**
 
-    > **Warning — permanent data loss:** Deleting `<cluster>` with `--force`
-    > permanently destroys the cluster, its `<primary>` instance, all databases,
+    > **Warning: permanent data loss.** Deleting `<primary>` and `<cluster>`
+    > permanently destroys the primary instance, the cluster, all databases,
     > data, and database users.
 
     -   **Never touch an existing cluster:** If `<cluster>` already existed
-        before Step P (i.e., P.2b was used), **skip this step completely**—never
-        propose or run `clusters delete`, even if the user asks to tear down
-        everything created by this skill. Leave `<cluster>` and `<primary>`
+        before Step P (i.e., P.2b was used), **skip this step completely** and
+        never propose or run `clusters delete`, even if the user asks to tear
+        down everything created by this skill. Leave `<cluster>` and `<primary>`
         untouched and confirm to the user that their cluster was preserved.
     -   **Strict gating for newly created test clusters:** Include this step
         **only** when `<cluster>` was newly created in Step P for a trial
         **and** the user explicitly asks to delete the cluster itself (or to
         delete everything created during that scratch trial). Before running the
-        command, warn the user clearly about permanent data loss on `<cluster>`
-        and `<primary>`, name `<cluster>` explicitly in your confirmation list,
-        and **end your turn** to wait for user approval (the user can also run
-        the command without `--quiet` in their own terminal if they prefer an
-        interactive prompt).
+        commands, warn the user clearly about permanent data loss on `<cluster>`
+        and `<primary>`, name `<primary>` and `<cluster>` explicitly in your
+        confirmation list, and **end your turn** to wait for user approval (the
+        user can also run the commands without `--quiet` in their own terminal
+        if they prefer an interactive prompt).
     -   Once approved, run **after** `<pool>` is deleted (Step 3) and **before**
-        deleting `<subnet>` and `<vpc>` (Step 5), then verify `NOT_FOUND`:
+        deleting `<subnet>` and `<vpc>` (Step 5). Delete `<primary>` first, then
+        delete `<cluster>` without `--force` (so cluster deletion fails safely
+        if any other instance still exists in `<cluster>`), and verify
+        `NOT_FOUND`:
 
     ```bash
+    gcloud beta alloydb instances delete <primary> \
+        --project=<project_id> --region=<region> --cluster=<cluster> --quiet
+
     gcloud beta alloydb clusters delete <cluster> \
-        --project=<project_id> --region=<region> --force --quiet
+        --project=<project_id> --region=<region> --quiet
 
     gcloud beta alloydb clusters describe <cluster> \
         --project=<project_id> --region=<region>

@@ -147,16 +147,10 @@ class AgentPoolDB:
   def from_env(cls) -> "AgentPoolDB":
     """Reads AGENT_POOL_URL / _DB_NAME / _USER / _CA_PEM."""
     return cls(
-        url=(env_str("AGENT_POOL_URL") or env_str("PRIMARY_DB_URL")).rstrip(
-            "/"
-        ),
-        database=(
-            env_str("AGENT_POOL_DB_NAME")
-            or env_str("PRIMARY_DB_NAME")
-            or "postgres"
-        ),
-        user=env_str("AGENT_POOL_USER") or env_str("PRIMARY_DB_USER"),
-        ca_pem=env_str("AGENT_POOL_CA_PEM") or env_str("PRIMARY_DB_CA_PEM"),
+        url=env_str("AGENT_POOL_URL").rstrip("/"),
+        database=env_str("AGENT_POOL_DB_NAME", "postgres"),
+        user=env_str("AGENT_POOL_USER"),
+        ca_pem=env_str("AGENT_POOL_CA_PEM"),
     )
 
 
