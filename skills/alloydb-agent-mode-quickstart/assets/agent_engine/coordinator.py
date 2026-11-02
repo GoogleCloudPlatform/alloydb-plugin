@@ -21,7 +21,7 @@ Gemini Enterprise.
 Configuration comes from environment variables set by deploy_agent.py:
   AGENT_MODEL, AGENT_NAME, TARGET_ENGINE, TARGET_PROJECT, TARGET_LOCATION,
   TARGET_DISPLAY, AGENT_CONTEXT, SWARM_WORK_PREAMBLE,
-  SWARM_MAX, SWARM_STAGGER_SECONDS, PRIMARY_DB_URL / _NAME / _USER / _CA_PEM.
+  SWARM_MAX, SWARM_STAGGER_SECONDS, AGENT_POOL_URL / _DB_NAME / _USER / _CA_PEM.
 """
 
 import re
@@ -38,7 +38,7 @@ import utility  # bundled alongside this module (see deploy_agent.py)
 import vertexai
 from vertexai import agent_engines
 
-PRIMARY = utility.PrimaryDB.from_env()
+AGENT_POOL = utility.AgentPoolDB.from_env()
 TARGET_ENGINE = utility.env_str("TARGET_ENGINE")
 TARGET_PROJECT = utility.env_str("TARGET_PROJECT")
 TARGET_LOCATION = utility.env_str("TARGET_LOCATION")
@@ -53,9 +53,16 @@ if not (TARGET_ENGINE and TARGET_PROJECT and TARGET_LOCATION):
 _API = f"https://{TARGET_LOCATION}-aiplatform.googleapis.com/v1beta1"
 
 K_RUNS = "swarm_runs"
+_MAX_AGENT_ID_LEN = 8
+# Vertex AI SessionService.ListEvents accepts only the cloud-platform OAuth
+# scope (no narrower read-only scope exists on aiplatform.googleapis.com);
+# least privilege is enforced by IAM roles on the runtime service account.
+_AIPLATFORM_SCOPES = ("https://www.googleapis.com/auth/cloud-platform",)
 
 _engine_lock = threading.Lock()
 _engine = None
+_creds_lock = threading.Lock()
+_creds = None
 
 
 def _target_engine():
@@ -68,18 +75,25 @@ def _target_engine():
     return _engine
 
 
+def _authed_token() -> str:
+  """Returns a cached, valid access token for the runtime service account."""
+  global _creds
+  with _creds_lock:
+    if _creds is None:
+      _creds, _ = google.auth.default(scopes=list(_AIPLATFORM_SCOPES))
+    if not _creds.valid:
+      _creds.refresh(google.auth.transport.requests.Request())
+    return _creds.token
+
+
 def _authed_get(
     url: str, params: dict[str, Any] | None = None
 ) -> dict[str, Any]:
   """GET against the Agent Engine Sessions REST API as this agent's SA."""
-  creds, _ = google.auth.default(
-      scopes=["https://www.googleapis.com/auth/cloud-platform"]
-  )
-  creds.refresh(google.auth.transport.requests.Request())
   r = requests.get(
       url,
       params=params or {},
-      headers={"Authorization": f"Bearer {creds.token}"},
+      headers={"Authorization": f"Bearer {_authed_token()}"},
       timeout=60,
   )
   r.raise_for_status()
@@ -89,14 +103,18 @@ def _authed_get(
 def _child_report(session_id: str) -> tuple[str | None, bool]:
   """Return (last_model_text, turn_complete) for a child session."""
   url = f"{_API}/{TARGET_ENGINE}/sessions/{session_id}/events"
-  events, page = [], None
+  events, page_token = [], None
   while True:
     d = _authed_get(
-        url, {"pageSize": 100, **({"pageToken": page} if page else {})}
+        url,
+        {
+            "pageSize": 100,
+            **({"pageToken": page_token} if page_token else {}),
+        },
     )
     events += d.get("sessionEvents", d.get("events", []))
-    page = d.get("nextPageToken")
-    if not page:
+    page_token = d.get("nextPageToken")
+    if not page_token:
       break
 
   def _author(ev):
@@ -106,8 +124,10 @@ def _child_report(session_id: str) -> tuple[str | None, bool]:
   def _parts(ev):
     return (ev.get("content") or {}).get("parts") or []
 
+  reversed_events = list(reversed(events))
+
   last_text = None
-  for ev in reversed(events):
+  for ev in reversed_events:
     if _author(ev) == "user":
       continue
     text = "".join(
@@ -118,7 +138,7 @@ def _child_report(session_id: str) -> tuple[str | None, bool]:
       break
 
   turn_complete = False
-  for ev in reversed(events):
+  for ev in reversed_events:
     parts = _parts(ev)
     if not parts:
       continue
@@ -180,8 +200,8 @@ def _launch_async(children: list[dict[str, Any]]) -> None:
 # --------------------------------------------------------------------------
 # FunctionTools
 # --------------------------------------------------------------------------
-def launch_swarm(  # pylint: disable=g-bare-generic
-    briefs: list[dict], tool_context: ToolContext
+def launch_swarm(
+    briefs: list[dict[str, str]], tool_context: ToolContext
 ) -> dict[str, Any]:
   """Launches an investigation swarm on the target deployment in parallel.
 
@@ -205,7 +225,7 @@ def launch_swarm(  # pylint: disable=g-bare-generic
   children = []
   for b in briefs:
     agent_id = (
-        re.sub(r"\W", "", str(b.get("agent_id", "")))[:8]
+        re.sub(r"\W", "", str(b.get("agent_id", "")))[:_MAX_AGENT_ID_LEN]
         or f"s{len(children)+1:02d}"
     )
     user_id = f"{run_id}-{agent_id}"
@@ -275,10 +295,10 @@ def swarm_status(run_id: str, tool_context: ToolContext) -> dict[str, Any]:
     else:
       state = "no output yet"
     status.append({"agent_id": c["agent_id"], "state": state})
-  done = sum(1 for s in status if s["state"].startswith("done"))
+  completed_count = sum(1 for s in status if s["state"].startswith("done"))
   return {
       "run_id": run_id,
-      "done": done,
+      "completed_count": completed_count,
       "total": len(status),
       "agents": status,
   }
@@ -340,8 +360,8 @@ _CONTEXT = utility.context_section(
     " context, so put in a brief only the parts its mission needs."
 )
 _WORK_PREAMBLE = utility.env_str("SWARM_WORK_PREAMBLE") or (
-    "Work autonomously (no clarifying questions). Learn the primary's schema,"
-    " answer with read-only SQL; never fabricate results."
+    "Work autonomously (no clarifying questions). Learn the shared database's"
+    " schema, answer with read-only SQL; never fabricate results."
 )
 
 _COORD_NAME = utility.agent_name(
@@ -356,46 +376,11 @@ _CHART_NOTE = (
     " so the chart is near the end, just before next steps, never at the"
     " top."
 )
-
-
-async def render_chart(  # pylint: disable=g-bare-generic
-    kind: str,
-    title: str,
-    x: list,
-    series: dict,
-    caption: str = "",
-    drilldowns: list | None = None,
-    tool_context: ToolContext = None,
-) -> dict[str, Any]:
-  """Renders a chart of numbers collected from the swarm as an inline image.
-
-  Args:
-    kind: Chart type: "line" (trends over time), "bar" (one ranked series, e.g.
-      revenue lost per root cause), or "grouped_bar" (2+ series across the same
-      categories, e.g. baseline vs window fill).
-    title: Chart title.
-    x: Axis labels.
-    series: Mapping of `{"name": [numbers aligned with x]}`.
-    caption: Optional caption rendered below the chart.
-    drilldowns: Optional list of follow-up questions worth offering.
-    tool_context: ADK tool context (supplied automatically).
-
-  Returns:
-    A dict containing a `placeholder` token — put it on its own line in your
-    report where the chart should appear (it becomes the inline image), with a
-    one-line takeaway near it; do NOT write a markdown image/link. On status
-    "error", show a table.
-  """
-  return utility.stash_chart(
-      tool_context,
-      utility.render_b64(kind, title, x, series, caption, drilldowns),
-      _CHART_NOTE,
-  )
-
+render_chart = utility.make_render_chart(_CHART_NOTE)
 
 # The Agent Pool's tools (execute_sql_read_only, get_schema), mounted on the
 # coordinator for single-question answers, direct to the pool (AlloyDB IAM).
-_POOL_TOOLSET = utility.pool_toolset(PRIMARY) if PRIMARY.url else None
+_POOL_TOOLSET = utility.pool_toolset(AGENT_POOL) if AGENT_POOL.url else None
 
 
 _CHARTS_NOTE = """
@@ -417,7 +402,7 @@ numbers taken verbatim from agents' findings."""
 
 _DIRECT_PROMPT = """
 YOU CAN ALSO ANSWER SINGLE QUESTIONS DIRECTLY (no swarm needed). You have
-read-only access to the same shared primary database the swarm agents use,
+read-only access to the same shared AlloyDB database the swarm agents use,
 straight from its AlloyDB Agent Pool: call `get_schema` to learn its
 tables/columns, then answer with `execute_sql_read_only` (SELECT-only; keep
 result sets small with GROUP BY / LIMIT). Never pass `database`; it is
@@ -443,7 +428,7 @@ query"). Speak in business terms — "unit fill rate by month", "supplier
 on-time delivery". Same when you synthesize swarm findings: translate the
 agents' tool/query references into plain business language."""
 
-_DIRECT_NOTE = _DIRECT_PROMPT if PRIMARY.url else ""
+_DIRECT_NOTE = _DIRECT_PROMPT if AGENT_POOL.url else ""
 
 root_agent = Agent(
     name=_COORD_NAME,
@@ -451,12 +436,12 @@ root_agent = Agent(
         model=utility.env_str("AGENT_MODEL", "gemini-3.8-flash")
     ),
     after_model_callback=utility.charts_after_model,
-    before_tool_callback=utility.bind_database(PRIMARY.database),
+    before_tool_callback=utility.bind_database(AGENT_POOL.database),
     instruction=utility.StaticInstruction(
         f"""You are the SWARM COORDINATOR for {TARGET_DISPLAY}. Your
 main job is to size a swarm of parallel investigation agents (child
 sessions of the deployed agent), author their missions, launch them, track
-them, and synthesize their findings.{" You can additionally answer single questions directly off the primary database — see below." if PRIMARY.url else " You never analyze data yourself."}
+them, and synthesize their findings.{" You can additionally answer single questions directly off the shared database — see below." if AGENT_POOL.url else " You never analyze data yourself."}
 
 {_CONTEXT or "No context was provided: ask the user what to investigate, and learn the domain from the schema."}
 
@@ -467,7 +452,7 @@ WHEN THE USER ASKS FOR AN INVESTIGATION:
 {_WORK_PREAMBLE}
 ---
    (b) "YOUR MISSION: <unique mission>" — one distinct angle per agent,
-   grounded in the domain and the primary database's schema (plus
+   grounded in the domain and the shared database's schema (plus
    cross-cutting roles like dollar-weighted triage and a devil's advocate
    who tries to REFUTE the leading hypotheses); (c) the instruction to end
    with a report titled "AGENT <agent_id> FINDINGS" with sections: what I
@@ -483,7 +468,7 @@ ON LATER TURNS:
   finished its analysis without the exact title still counts as done; do
   NOT relaunch it. Only offer `relaunch_agents` for agents stuck at "no
   output yet" well after launch.
-- "report" -> once the `done` count covers all (or enough) agents, call
+- "report" -> once `completed_count` covers all (or enough) agents, call
   `collect_findings(run_id)`, then synthesize: executive
   summary; each distinct root cause with its strongest numbers and which
   agents corroborate it; contradictions kept visible; remediations ranked

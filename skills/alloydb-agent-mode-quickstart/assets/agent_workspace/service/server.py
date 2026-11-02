@@ -19,7 +19,7 @@ One Cloud Run service per deployment runs [this router + PostgreSQL
 sidecar], min=max=1. Each agent session gets its own database
 (agent_db_<uuid>) and its own NOSUPERUSER role inside the shared Postgres.
 Nothing here creates or deletes cloud resources, and nothing here touches the
-primary database: agents query the primary directly through the AlloyDB Agent
+shared AlloyDB database: agents query it directly through the AlloyDB Agent
 Pool.
 
 One surface, one MCP endpoint (/mcp, agent SA via Cloud Run IAM), four tools,
@@ -67,6 +67,7 @@ MAX_ACTIVE_DBS = 20
 SESSION_CONN_LIMIT = 10
 SESSION_STMT_TIMEOUT = "120s"
 MAX_ROWS = 1000
+MAX_SESSION_ID_LEN = 128
 PROVISION_WAIT_S = 30  # max wait for another call's in-flight provisioning
 
 SESSION_HEADER = "x-session-id"
@@ -158,13 +159,20 @@ def _drop_db_and_role(database: str, role: str) -> None:
 # --------------------------------------------------------------------------
 # Session lookup — THE cross-session isolation check (layer 1)
 # --------------------------------------------------------------------------
-def _session_id(ctx: Context) -> str:
-  return ((ctx.headers or {}).get(SESSION_HEADER) or "").strip()
+def _validated_session_id(ctx: Context) -> tuple[str, dict[str, Any] | None]:
+  """Extracts and validates X-Session-Id from MCP request headers."""
+  raw = ((ctx.headers or {}).get(SESSION_HEADER) or "").strip()
+  if not raw:
+    return "", _NO_HEADER
+  if len(raw) > MAX_SESSION_ID_LEN or not raw.isprintable():
+    return "", _BAD_HEADER
+  return raw, None
 
 
-def _session_from_headers(ctx: Context) -> Session | None:
-  """The caller's READY session, by X-Session-Id; None if it has none."""
-  session = _sessions.get(_session_id(ctx))
+def _ready_session(session_id: str) -> Session | None:
+  """Returns the caller's READY session for `session_id`, or None."""
+  with _LOCK:
+    session = _sessions.get(session_id)
   return session if session is not None and session.ready else None
 
 
@@ -235,6 +243,12 @@ def _schema(session: Session, table: str) -> dict[str, Any]:
 
 _NO_HEADER = {
     "error": "missing X-Session-Id header (set by the agent runtime)"
+}
+_BAD_HEADER = {
+    "error": (
+        f"invalid X-Session-Id header (must be 1..{MAX_SESSION_ID_LEN}"
+        " printable characters)"
+    )
 }
 _NO_SESSION = {
     "error": (
@@ -310,9 +324,9 @@ async def provision_database(ctx: Context) -> dict[str, Any]:
   Call once, before any scratch work; takes a few seconds. Safe to call again:
   it returns the existing database.
   """
-  session_id = _session_id(ctx)
-  if not session_id:
-    return _NO_HEADER
+  session_id, err = _validated_session_id(ctx)
+  if err is not None:
+    return err
   try:
     return await asyncio.to_thread(_provision, session_id)
   except (psycopg.Error, TimeoutError) as exc:
@@ -325,9 +339,9 @@ async def release_database(ctx: Context) -> dict[str, Any]:
 
   Call when the user is done (a TTL reaper cleans up otherwise).
   """
-  session_id = _session_id(ctx)
-  if not session_id:
-    return _NO_HEADER
+  session_id, err = _validated_session_id(ctx)
+  if err is not None:
+    return err
   with _LOCK:
     session = _sessions.get(session_id)
   if session is None:
@@ -346,12 +360,13 @@ async def execute_sql(  # pylint: disable=redefined-outer-name
 ) -> dict[str, Any]:
   """Runs any SQL statement in your private scratch database.
 
-  Supports CREATE TABLE, INSERT, UPDATE, SELECT, etc. Never touches the primary
+  Supports CREATE TABLE, INSERT, UPDATE, SELECT, etc. Never touches the shared
   database. Queries return up to 1000 rows.
   """
-  if not _session_id(ctx):
-    return _NO_HEADER
-  session = _session_from_headers(ctx)
+  session_id, err = _validated_session_id(ctx)
+  if err is not None:
+    return err
+  session = _ready_session(session_id)
   if session is None:
     return _NO_SESSION
   try:
@@ -366,9 +381,10 @@ async def get_schema(ctx: Context, table: str = "") -> dict[str, Any]:
 
   Pass `table` to describe just one table.
   """
-  if not _session_id(ctx):
-    return _NO_HEADER
-  session = _session_from_headers(ctx)
+  session_id, err = _validated_session_id(ctx)
+  if err is not None:
+    return err
+  session = _ready_session(session_id)
   if session is None:
     return _NO_SESSION
   try:
@@ -537,4 +553,6 @@ if __name__ == "__main__":
   _wipe_orphans()
   _isolation_self_check()
   _start_reaper_thread()
-  uvicorn.run(app, host="0.0.0.0", port=8080)
+  # Cloud Run requires binding 0.0.0.0:$PORT inside the container; network
+  # access is restricted by INGRESS_TRAFFIC_INTERNAL_ONLY and Cloud Run IAM.
+  uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8080")))

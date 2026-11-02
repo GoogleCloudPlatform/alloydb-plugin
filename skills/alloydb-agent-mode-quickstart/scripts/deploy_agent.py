@@ -16,7 +16,7 @@
 r"""Deploys agent runtimes to Agent Engine and registers them in Gemini Enterprise.
 
 Runtimes (in assets/agent_engine/):
-  * agent.py       — main data agent (read-only primary DB + scratch DB)
+  * agent.py       — main data agent (read-only AlloyDB pool + scratch DB)
   * coordinator.py — swarm coordinator (launches parallel investigations)
 
 Usage (from the working directory):
@@ -51,11 +51,13 @@ AGENTS_DIR = SKILL_ROOT / "assets" / "agent_engine"
 _COMMON_PINNED_PKGS = (
     "google-cloud-aiplatform",
     "google-adk",
+    "google-genai",
     "pydantic",
     "google-auth",
     "mcp",
     "httpx2",
     "cloudpickle",
+    "matplotlib",
 )
 MAIN_PINNED_PKGS = _COMMON_PINNED_PKGS
 COORDINATOR_PINNED_PKGS = (*_COMMON_PINNED_PKGS, "requests")
@@ -173,7 +175,7 @@ class AgentEngineDeployer:
         "AGENT_NAME": _agent_name(self.cfg, "agent"),
         "AGENT_WORKSPACE_URL": resolved_workspace_url,
         "AGENT_CONTEXT": self.cfg.agent_context("agent"),
-        **self._direct_primary_env(),
+        **self._agent_pool_env(),
     }
     remote = self._stage_and_deploy_engine(
         module_name="agent",
@@ -189,8 +191,8 @@ class AgentEngineDeployer:
   def deploy_coordinator(self, target_engine: str) -> str:
     """Deploys the swarm coordinator (`assets/agent_engine/coordinator.py`).
 
-    The coordinator always reaches the primary DIRECTLY at the AlloyDB Agent
-    Pool (its generic `execute_sql_read_only` / `get_schema`); it has no
+    The coordinator always reaches the shared database DIRECTLY at the AlloyDB
+    Agent Pool (its generic `execute_sql_read_only` / `get_schema`); it has no
     scratch database of its own.
 
     Args:
@@ -211,7 +213,7 @@ class AgentEngineDeployer:
         "AGENT_CONTEXT": self.cfg.agent_context("coordinator"),
         "SWARM_WORK_PREAMBLE": self._work_preamble(),
         "AGENT_MODEL": self.cfg.model,
-        **self._direct_primary_env(),
+        **self._agent_pool_env(),
     }
     remote = self._stage_and_deploy_engine(
         module_name="coordinator",
@@ -230,23 +232,23 @@ class AgentEngineDeployer:
     )
     return remote.resource_name
 
-  def _direct_primary_env(self) -> dict[str, str]:
-    """Returns PRIMARY_DB_* env vars pointing at the AlloyDB Agent Pool.
+  def _agent_pool_env(self) -> dict[str, str]:
+    """Returns AGENT_POOL_* env vars pointing at the AlloyDB Agent Pool.
 
     Both agents use it: the pool serves `execute_sql_read_only` and
     `get_schema`; the Agent Workspace only hosts per-session scratch DBs.
 
     Returns:
-      A mapping of PRIMARY_DB_* environment variables, or {} when unset.
+      A mapping of AGENT_POOL_* environment variables, or {} when unset.
     """
-    ep = self.cfg.primary_endpoint()
+    ep = self.cfg.agent_pool_endpoint()
     if not ep["url"]:
       return {}
     return {
-        "PRIMARY_DB_URL": ep["url"],
-        "PRIMARY_DB_CA_PEM": ep["ca_pem"],
-        "PRIMARY_DB_NAME": self.cfg.db_name,
-        "PRIMARY_DB_USER": self.cfg.agent_sa.removesuffix(
+        "AGENT_POOL_URL": ep["url"],
+        "AGENT_POOL_CA_PEM": ep["ca_pem"],
+        "AGENT_POOL_DB_NAME": self.cfg.db_name,
+        "AGENT_POOL_USER": self.cfg.agent_sa.removesuffix(
             ".gserviceaccount.com"
         ),
     }
@@ -254,8 +256,8 @@ class AgentEngineDeployer:
   def _work_preamble(self) -> str:
     """Builds the investigation workflow preamble for the swarm coordinator."""
     parts = [
-        "WORK DIRECTLY OFF THE PRIMARY:\n1. get_schema FIRST to learn the"
-        " tables and columns.\n2. Answer every metric with"
+        "WORK DIRECTLY OFF THE SHARED DATABASE:\n1. get_schema FIRST to learn"
+        " the tables and columns.\n2. Answer every metric with"
         " execute_sql_read_only — read-only; keep result sets small; never"
         " claim a number a query did not return."
     ]
@@ -331,7 +333,6 @@ class AgentEngineDeployer:
         "extra_packages": [f"{module_name}.py", "utility.py"],
         "requirements": [
             "google-cloud-aiplatform[adk,agent_engines]",
-            "matplotlib>=3.8",
             *pinned,
             *extra_reqs,
         ],
@@ -683,7 +684,7 @@ class AgentValidator:
   _SIMPLE_TOOLS = ("get_schema", "execute_sql_read_only")
 
   _SWARM_PROMPT = (
-      "Inspect the primary database with get_schema and run"
+      "Inspect the shared database with get_schema and run"
       " execute_sql_read_only to sample up to 5 rows from any table (or SELECT"
       " 1 if empty). Then call scratch_provision_database, create a scratch"
       " table and insert the sample with scratch_execute_sql, verify the row"

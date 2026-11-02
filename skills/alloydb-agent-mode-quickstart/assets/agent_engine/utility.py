@@ -16,17 +16,18 @@
 
 Bundled next to both agents by scripts/deploy_agent.py. Holds no deployment
 state of its own: each agent reads its environment variables (set by
-deploy_agent.py) at import time via `env_str()` / `PrimaryDB.from_env()` /
+deploy_agent.py) at import time via `env_str()` / `AgentPoolDB.from_env()` /
 `context_section()`, so one deploy process can build both agents
 without stale module state.
 
 Contents:
-  * Primary database: `PrimaryDB` (connection settings), `pool_toolset()`
+  * AlloyDB Agent Pool: `AgentPoolDB` (connection settings), `pool_toolset()`
     (the AlloyDB Agent Pool's `execute_sql_read_only` / `get_schema`, direct),
     `bind_database()`.
   * Agent Workspace (per-session scratch DBs): `workspace_toolset()`,
     `SessionIdHeader`.
-  * Inline charts: `render_b64()`, `stash_chart()`, `charts_after_model()`.
+  * Inline charts: `make_render_chart()`, `render_b64()`, `stash_chart()`,
+    `charts_after_model()`.
   * Model: `GlobalGemini` (global endpoint with retries), `agent_name()`.
 
 ADK must open MCP sessions with `server/discover` (deploy_agent.py sets
@@ -36,6 +37,7 @@ arrays as `structuredContent`, which the legacy handshake rejects.
 
 import asyncio
 import base64
+from collections.abc import Callable
 import dataclasses
 import io
 import os
@@ -112,7 +114,7 @@ class StaticInstruction:
 
 
 # =============================================================================
-# Primary database (MCP)
+# AlloyDB Agent Pool (MCP)
 # =============================================================================
 
 SQL_TOOL = "execute_sql_read_only"
@@ -125,7 +127,7 @@ WORKSPACE_TOOLS = (
     "release_database",
 )
 # The model sees scratch_provision_database, scratch_execute_sql, ...; the
-# prefix keeps scratch get_schema apart from the primary's.
+# prefix keeps scratch get_schema apart from the pool's.
 SCRATCH_PREFIX = "scratch"
 
 _ALLOYDB_SCOPE = "https://www.googleapis.com/auth/alloydb.login"
@@ -133,8 +135,8 @@ _TIMEOUT = httpx2.Timeout(30.0, read=300.0)
 
 
 @dataclasses.dataclass(frozen=True)
-class PrimaryDB:
-  """Connection settings for the primary's AlloyDB Agent Pool."""
+class AgentPoolDB:
+  """Connection settings for the AlloyDB Agent Pool."""
 
   url: str = ""
   database: str = "postgres"
@@ -142,13 +144,19 @@ class PrimaryDB:
   ca_pem: str = ""
 
   @classmethod
-  def from_env(cls) -> "PrimaryDB":
-    """Reads PRIMARY_DB_URL / _NAME / _USER / _CA_PEM."""
+  def from_env(cls) -> "AgentPoolDB":
+    """Reads AGENT_POOL_URL / _DB_NAME / _USER / _CA_PEM."""
     return cls(
-        url=env_str("PRIMARY_DB_URL").rstrip("/"),
-        database=env_str("PRIMARY_DB_NAME", "postgres"),
-        user=env_str("PRIMARY_DB_USER"),
-        ca_pem=env_str("PRIMARY_DB_CA_PEM"),
+        url=(env_str("AGENT_POOL_URL") or env_str("PRIMARY_DB_URL")).rstrip(
+            "/"
+        ),
+        database=(
+            env_str("AGENT_POOL_DB_NAME")
+            or env_str("PRIMARY_DB_NAME")
+            or "postgres"
+        ),
+        user=env_str("AGENT_POOL_USER") or env_str("PRIMARY_DB_USER"),
+        ca_pem=env_str("AGENT_POOL_CA_PEM") or env_str("PRIMARY_DB_CA_PEM"),
     )
 
 
@@ -217,7 +225,7 @@ class _HttpClientFactory:
     if self._ca_pem:
       verify = ssl.create_default_context(cadata=self._ca_pem)
     return httpx2.AsyncClient(
-        follow_redirects=True,
+        follow_redirects=False,
         verify=verify,
         headers=headers,
         timeout=timeout or _TIMEOUT,
@@ -225,27 +233,27 @@ class _HttpClientFactory:
     )
 
 
-def pool_toolset(primary: PrimaryDB) -> mcp_toolset.McpToolset:
+def pool_toolset(pool: AgentPoolDB) -> mcp_toolset.McpToolset:
   """The Agent Pool's `execute_sql_read_only` / `get_schema`, direct.
 
   Connects over HTTPS, verifying the pool's certificate against the cluster's
-  root CA (`primary.ca_pem`), and authenticates as the runtime's service
+  root CA (`pool.ca_pem`), and authenticates as the runtime's service
   account (AlloyDB IAM user, read-only grants). Mount with `bind_database()`
   so the model never chooses the database.
 
   Args:
-    primary: Primary AlloyDB connection configuration.
+    pool: AlloyDB Agent Pool connection configuration.
 
   Returns:
     Configured MCP toolset for the Agent Pool.
   """
   return mcp_toolset.McpToolset(
       connection_params=mcp_session_manager.StreamableHTTPConnectionParams(
-          url=f"{primary.url}/mcp",
-          headers={"AlloyDB-User": primary.user} if primary.user else None,
+          url=f"{pool.url}/mcp",
+          headers={"AlloyDB-User": pool.user} if pool.user else None,
           timeout=60.0,
           terminate_on_close=False,
-          httpx_client_factory=_HttpClientFactory(ca_pem=primary.ca_pem),
+          httpx_client_factory=_HttpClientFactory(ca_pem=pool.ca_pem),
       ),
       tool_filter=[SQL_TOOL, SCHEMA_TOOL],
   )
@@ -475,6 +483,56 @@ def stash_chart(
     result["placeholder"] = token
     result["note"] = note
   return result
+
+
+def make_render_chart(note: str) -> Callable[..., Any]:
+  """Builds an ADK `render_chart` tool bound to an agent-specific `note`.
+
+  Args:
+    note: Placement instruction returned alongside each chart placeholder token.
+
+  Returns:
+    An async `render_chart` tool callable suitable for ADK `Agent(tools=[...])`.
+  """
+
+  async def render_chart(
+      kind: str,
+      title: str,
+      x: list[str],
+      series: dict[str, list[float | None]],
+      caption: str = "",
+      drilldowns: list[str] | None = None,
+      tool_context: ToolContext | None = None,
+  ) -> dict[str, Any]:
+    """Renders a chart of data you already have as an inline image.
+
+    Args:
+      kind: Chart type: "line" (time series / trends), "bar" (one ranked or
+        compared series), or "grouped_bar" (2+ series compared across the same
+        categories).
+      title: Chart title.
+      x: Axis labels (months, categories, slices...). Keep under ~200 points —
+        aggregate first.
+      series: Mapping of `{"series name": [numbers aligned with x]}`.
+      caption: Optional caption rendered below the chart.
+      drilldowns: Optional list of up to 3 follow-up questions worth offering.
+      tool_context: ADK tool context (supplied automatically).
+
+    Returns:
+      A dict containing a `placeholder` token — put it on its own line where the
+      chart should appear (it becomes the inline image), with a one-line
+      takeaway near it; do NOT write a markdown image/link. On status "error",
+      show a table.
+    """
+    if tool_context is None:
+      return {"status": "error", "error": "missing ADK tool_context"}
+    return stash_chart(
+        tool_context,
+        render_b64(kind, title, x, series, caption, drilldowns),
+        note,
+    )
+
+  return render_chart
 
 
 def charts_after_model(callback_context, llm_response):

@@ -4,15 +4,15 @@ description: >-
   Provisions AlloyDB agent pools and deploys AI data agents or multi-agent
   swarms on Vertex AI Agent Engine and Gemini Enterprise. Three capabilities:
   (1) provision an AlloyDB agent pool over Private Service Connect (PSC) using
-  gcloud; (2) deploy a single agent querying the pool over MCP (get_schema,
-  execute_sql_read_only) with optional per-session writable PostgreSQL scratch
-  databases (Cloud Run Agent Workspace); (3) deploy an agent swarm with a
-  coordinator that fans questions across parallel worker sessions. Use when the
-  user wants to set up an AlloyDB agent pool, or deploy, update, validate,
-  register in Gemini Enterprise, or tear down a data agent or agent swarm on an
-  AlloyDB database (the agent generates and manages ./<name>.alloydb-agent.yaml
-  automatically). Don't use for standard non-agent AlloyDB
-  administration or standalone SQL query tuning.
+  gcloud (and AlloyDB MCP tools when configured); (2) deploy a single agent
+  querying the pool over MCP (get_schema, execute_sql_read_only) with optional
+  per-session writable PostgreSQL scratch databases (Cloud Run Agent Workspace);
+  (3) deploy an agent swarm with a coordinator that fans questions across
+  parallel worker sessions. Use when the user wants to set up an AlloyDB agent
+  pool, or deploy, update, validate, register in Gemini Enterprise, or tear down
+  a data agent or agent swarm on an AlloyDB database (the agent generates and
+  manages ./<name>.alloydb-agent.yaml automatically). Don't use for standard
+  non-agent AlloyDB administration or standalone SQL query tuning.
 compatibility: >-
   Self-contained (all scripts and assets are under scripts/ and assets/).
   Requires an authenticated gcloud CLI, Python 3.11+, bash, and Google Cloud
@@ -27,20 +27,22 @@ metadata:
 
 # AlloyDB Agent Pool Agents — from one pool to a swarm
 
-Enables an agent pool on a user's AlloyDB cluster, then deploys a running agent
-that answers questions against that read-only pool: either a single agent, or a
-swarm of parallel investigators with isolated per-session PostgreSQL scratch
-databases. The user does not need to write a config file by hand—ask for any
-missing settings and generate `./<name>.alloydb-agent.yaml` in the current
-working directory to drive the deployment scripts.
+Enables an agent pool on an existing or newly created AlloyDB cluster, then
+deploys a running agent that answers questions against that read-only pool:
+either a single agent, or a swarm of parallel investigators with isolated
+per-session PostgreSQL scratch databases. The user does not need to write a
+config file by hand—ask for any missing settings and generate
+`./<name>.alloydb-agent.yaml` in the current working directory to drive the
+deployment scripts.
 
 ## Capabilities (pick one first)
 
 Ask which capability the user wants, then run only its steps:
 
-1.  **Provision an agent pool (Step P, plain `gcloud`, no config file):**
-    enables agent mode on an AlloyDB cluster, creates a dedicated VPC/subnet,
-    and provisions an `AGENT_POOL` instance reachable over PSC.
+1.  **Provision an agent pool (Step P, `gcloud` + optional AlloyDB MCP, no
+    config file):** enables agent mode on an existing AlloyDB cluster, or
+    creates a new AlloyDB cluster with agent mode enabled, creates a dedicated
+    VPC/subnet, and provisions an `AGENT_POOL` instance reachable over PSC.
 2.  **Simple agent (Steps 0–5):** deploys one agent (`<name>_agent`) querying
     the pool over MCP (`get_schema`, `execute_sql_read_only`) and optionally
     publishes it to Gemini Enterprise.
@@ -53,6 +55,19 @@ Ask which capability the user wants, then run only its steps:
 
 -   **Prerequisite pool:** Capabilities 2 and 3 require an AlloyDB agent pool in
     `READY`. Run capability 1 (Step P) first unless the user already has one.
+-   **AlloyDB MCP tools vs. `gcloud`:** Where both this plugin's
+    `alloydb-postgres` MCP server and `gcloud` work—such as inspecting existing
+    clusters, instances, settings, or users (`list_clusters`, `get_cluster`,
+    `list_instances`, `get_instance`, `list_pg_settings`, `list_users`),
+    reusing configured `ALLOYDB_POSTGRES_*` settings after user confirmation, or
+    loading small SQL schemas/data (`execute_sql`, `list_tables`) when the
+    instance is network-reachable—prefer MCP when configured, and let the user
+    know MCP is an option. Because MCP in the plugin may or may not be
+    configured yet (or may not reach a PSC-only instance from outside its VPC),
+    note briefly if MCP is unconfigured and fall back directly to `gcloud`.
+    Agent Mode flags (`--enable-agent-mode`, `AGENT_POOL`,
+    `agentPoolInfo.dnsName`), VPC/PSC networking, `--database-flags` updates,
+    and Cloud Storage `clusters import` always require `gcloud`.
 -   **Agent-managed config (`./<name>.alloydb-agent.yaml`):** Generate and
     maintain `./<name>.alloydb-agent.yaml` in the current working directory
     (alongside `./.venv`). Two orthogonal knobs under `agent_engine` control the
@@ -125,7 +140,9 @@ service connection policies in `<project_id>`.
 
 **Guidance:** Follow
 [references/agent_pool_setup.md](references/agent_pool_setup.md) step by step
-using `gcloud`, confirming each command's output before running the next.
+(using AlloyDB MCP tools when configured for inspection/SQL, and `gcloud` for
+agent-mode, PSC networking, and fallback operations), confirming each command's
+output before running the next.
 
 **Rules:**
 
@@ -340,7 +357,7 @@ registration in place; no-op if `gemini_enterprise.app_id` is empty):
 ```
 
 See [references/swarm_coordinator.md](references/swarm_coordinator.md) for
-Gemini Enterprise setup, licensing notes, and chat test prompts.
+Gemini Enterprise prerequisites, licensing notes, and chat test prompts.
 
 **Rules:**
 
