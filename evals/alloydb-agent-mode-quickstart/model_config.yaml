@@ -26,12 +26,28 @@ env:
   GOOGLE_GENAI_USE_VERTEXAI: "true"
   GEMINI_CLI_TRUST_WORKSPACE: "true"
   GEMINI_MODEL: "gemini-3.8-flash"
+  PYTHONUNBUFFERED: "1"
   # EvalBench passes its own environment to the agent under test; clear the
-  # variables that point at the eval suite so the agent can't find the
-  # evalset and its rubrics.
+  # harness and shared-resource variables so the agent can't inspect the
+  # evalset, rubrics, or withheld scenario settings via env.
   EVAL_SUITE_DIR: ""
   EVAL_CONFIG: ""
   EVAL_SKILLS_DIR: ""
+  EVAL_RESULTS_DIR: ""
+  EVAL_GCP_PROJECT_ID: ""
+  EVAL_GCP_PROJECT_REGION: ""
+  EVAL_REPORTING_PROJECT: ""
+  EVAL_REPORTING_DATASET: ""
+  EVAL_SHARED_CLUSTER: ""
+  EVAL_SHARED_POOL: ""
+  EVAL_SHARED_DATABASE: ""
+  EVAL_FOUNDATION_SUFFIX: ""
+  EVAL_SHARED_VPC: ""
+  EVAL_SHARED_SUBNET: ""
+  EVAL_SHARED_ATTACHMENT: ""
+  EVAL_RUN_ID: ""
+  EVAL_SCENARIOS: ""
+  RELEASE_VERSION: ""
   OLDPWD: ""
 
 setup:

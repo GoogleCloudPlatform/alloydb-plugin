@@ -31,9 +31,13 @@ fail() {
 trap 'fail "setup.sh failed at line ${LINENO}"' ERR
 
 # teardown.sh refuses an empty EVAL_SCENARIOS, so refuse it before anything is
-# created.
+# created. Also require a lowercase alphanumeric EVAL_RUN_ID so both hyphenated
+# GCP resource names and underscored Agent Engine names match evalset.json.
 if [[ -v EVAL_SCENARIOS && -z "${EVAL_SCENARIOS}" ]]; then
   fail "EVAL_SCENARIOS is set but empty; unset it to run all scenarios."
+fi
+if [[ ! "${EVAL_RUN_ID:-}" =~ ^[a-z0-9]{1,15}$ ]]; then
+  fail "EVAL_RUN_ID must be 1-15 lowercase letters or digits (e.g. 'local' or 'pr174'); got '${EVAL_RUN_ID:-}'."
 fi
 
 if [[ -n "${EVAL_SCENARIOS:-}" ]]; then
@@ -50,11 +54,17 @@ for scenario in ${scenarios}; do
   rm -rf ".venv/fake_home/.gemini/tmp/${scenario}"
 done
 
-# Raise the Gemini CLI shell inactivity timeout to 40 minutes so long-running
-# AlloyDB and Agent Engine operations are not killed after the default 5-minute
-# window without output. Do not add the repository checkout to the CLI's
-# workspace directories: agents under evaluation must not read the evalset.
-python3 - << 'EOF'
+# Raise the Gemini CLI shell inactivity timeout above the 5-minute default:
+# 40 minutes when CUJ 1 is selected (AlloyDB primary creation can run >15 min
+# without output), and 10 minutes for CUJ 2/3 so stray commands fail fast
+# instead of exhausting the scenario budget. Do not add the repository checkout
+# to the CLI's workspace directories: agents under evaluation must not read the
+# evalset.
+INACTIVITY_TIMEOUT=600
+if [[ " ${scenarios} " == *" cuj1-provision-agent-pool "* ]]; then
+  INACTIVITY_TIMEOUT=2400
+fi
+INACTIVITY_TIMEOUT="${INACTIVITY_TIMEOUT}" python3 - << 'EOF'
 import json
 import os
 
@@ -70,11 +80,11 @@ if os.path.exists(settings_path):
 
 tools = data.setdefault("tools", {})
 shell_cfg = tools.setdefault("shell", {})
-shell_cfg["inactivityTimeout"] = 2400
+shell_cfg["inactivityTimeout"] = int(os.environ["INACTIVITY_TIMEOUT"])
 
 with open(settings_path, "w") as f:
     json.dump(data, f, indent=2)
-print(f"[setup] Updated Gemini CLI settings at {settings_path}")
+print(f"[setup] Updated Gemini CLI settings at {settings_path} (inactivityTimeout={shell_cfg['inactivityTimeout']}s)")
 EOF
 
 echo "[setup] Initialized workspaces for: ${scenarios}"

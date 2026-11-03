@@ -39,6 +39,11 @@ fi
 SUITE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT="${EVAL_GCP_PROJECT_ID:?EVAL_GCP_PROJECT_ID must be set}"
 REGION="${EVAL_GCP_PROJECT_REGION:?EVAL_GCP_PROJECT_REGION must be set}"
+RUN_ID="${EVAL_RUN_ID:?EVAL_RUN_ID must be set}"
+if [[ ! "${RUN_ID}" =~ ^[a-z0-9]{1,15}$ ]]; then
+  echo "[teardown] EVAL_RUN_ID must be 1-15 lowercase letters or digits; got '${RUN_ID}'." >&2
+  exit 1
+fi
 WORKSPACES="/tmp/alloydb-agent-mode-evals/workspaces"
 
 if [[ -n "${EVAL_SCENARIOS:-}" ]]; then
@@ -83,39 +88,41 @@ EOF
   "${ws}/.venv/bin/python" "${SKILL_DIR}/scripts/deploy_agent.py" teardown \
     --config "${ws}/.teardown.alloydb-agent.yaml" --yes
 }
-selected cuj2-simple-agent && teardown_agent cuj2-simple-agent "${CUJ2_NAME:?CUJ2_NAME must be set}"
-selected cuj3-agent-swarm && teardown_agent cuj3-agent-swarm "${CUJ3_NAME:?CUJ3_NAME must be set}"
+selected cuj2-simple-agent && teardown_agent cuj2-simple-agent "cuj2-${RUN_ID}"
+selected cuj3-agent-swarm && teardown_agent cuj3-agent-swarm "cuj3-${RUN_ID}"
 
 if selected cuj1-provision-agent-pool; then
-  : "${CUJ1_CLUSTER:?CUJ1_CLUSTER must be set}" "${CUJ1_POOL:?CUJ1_POOL must be set}"
-  : "${CUJ1_VPC:?CUJ1_VPC must be set}" "${CUJ1_SUBNET:?CUJ1_SUBNET must be set}"
+  cuj1_cluster="cuj1-${RUN_ID}-cluster"
+  cuj1_pool="cuj1-${RUN_ID}-pool"
+  cuj1_vpc="cuj1-${RUN_ID}-vpc"
+  cuj1_subnet="cuj1-${RUN_ID}-subnet"
 
   # 2. CUJ 1 AlloyDB resources. CUJ 1's agent deletes everything it created as
   #    the last part of the scenario; steps 2-3 remove whatever a failed run left
   #    behind. Delete the pool first, then force-delete the cluster so CI cleanup
   #    also removes any remaining primary or read-pool instances.
-  gcloud beta alloydb instances delete "${CUJ1_POOL}" --cluster="${CUJ1_CLUSTER}" \
+  gcloud beta alloydb instances delete "${cuj1_pool}" --cluster="${cuj1_cluster}" \
     --project="${PROJECT}" --region="${REGION}" --quiet
-  gcloud beta alloydb clusters delete "${CUJ1_CLUSTER}" \
+  gcloud beta alloydb clusters delete "${cuj1_cluster}" \
     --project="${PROJECT}" --region="${REGION}" --force --quiet
 
   # 3. CUJ 1 network. Once the pool's PSC endpoint is gone, delete the SCP and
   #    the subnet. Delete all firewall rules in one call and the VPC right after.
   no_psc_endpoint() {
     [[ -z "$(gcloud compute forwarding-rules list --project="${PROJECT}" \
-      --filter="network~/${CUJ1_VPC}$" --format='value(name)' 2>/dev/null)" ]]
+      --filter="network~/${cuj1_vpc}$" --format='value(name)' 2>/dev/null)" ]]
   }
-  wait_until "PSC endpoint removed from ${CUJ1_VPC}" no_psc_endpoint
-  gcloud network-connectivity service-connection-policies delete "alloydb-agents-${CUJ1_VPC}" \
+  wait_until "PSC endpoint removed from ${cuj1_vpc}" no_psc_endpoint
+  gcloud network-connectivity service-connection-policies delete "alloydb-agents-${cuj1_vpc}" \
     --project="${PROJECT}" --region="${REGION}" --quiet
-  gcloud compute networks subnets delete "${CUJ1_SUBNET}" \
+  gcloud compute networks subnets delete "${cuj1_subnet}" \
     --project="${PROJECT}" --region="${REGION}" --quiet
   mapfile -t fw_rules < <(gcloud compute firewall-rules list --project="${PROJECT}" \
-    --filter="network~/${CUJ1_VPC}$" --format='value(name)' 2>/dev/null)
+    --filter="network~/${cuj1_vpc}$" --format='value(name)' 2>/dev/null)
   if ((${#fw_rules[@]})); then
     gcloud compute firewall-rules delete "${fw_rules[@]}" --project="${PROJECT}" --quiet
   fi
-  gcloud compute networks delete "${CUJ1_VPC}" --project="${PROJECT}" --quiet
+  gcloud compute networks delete "${cuj1_vpc}" --project="${PROJECT}" --quiet
 fi
 
 # 4. The selected scenarios' workspaces; the shared parents go once no other

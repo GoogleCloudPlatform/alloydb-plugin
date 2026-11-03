@@ -47,18 +47,10 @@ export EVAL_SHARED_VPC="agents-vpc"
 export EVAL_SHARED_SUBNET="agents-subnet"
 export EVAL_SHARED_ATTACHMENT="agents-psc-attachment-evals"
 
-# Per-run resource names
-export CUJ1_CLUSTER="cuj1-local-cluster"
-export CUJ1_PRIMARY="cuj1-local-primary"
-export CUJ1_POOL="cuj1-local-pool"
-export CUJ1_VPC="cuj1-local-vpc"
-export CUJ1_SUBNET="cuj1-local-subnet"
-export CUJ2_NAME="cuj2-local"
-export CUJ3_NAME="cuj3-local"
-export CUJ3_ENGINE_PREFIX="${CUJ3_NAME//-/_}"
+# Per-run resource namespace (1-15 lowercase letters or digits, no hyphens)
+export EVAL_RUN_ID="local"
 
-# Optional: run only some scenarios (comma-separated). Keep all variables above
-# set anyway: EvalBench resolves every ${...} in evalset.json before filtering.
+# Optional: run only some scenarios (comma-separated).
 export EVAL_SCENARIOS="cuj2-simple-agent"
 
 export EVAL_CONFIG="${EVAL_SUITE_DIR}/run_config.yaml"

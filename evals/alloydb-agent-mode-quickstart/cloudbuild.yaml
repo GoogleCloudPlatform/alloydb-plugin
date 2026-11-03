@@ -45,14 +45,7 @@ options:
     - 'EVAL_SHARED_VPC=${_SHARED_VPC}'
     - 'EVAL_SHARED_SUBNET=${_SHARED_SUBNET}'
     - 'EVAL_SHARED_ATTACHMENT=${_SHARED_ATTACHMENT}'
-    - 'CUJ1_CLUSTER=cuj1-pr${_PR_NUMBER}-cluster'
-    - 'CUJ1_PRIMARY=cuj1-pr${_PR_NUMBER}-primary'
-    - 'CUJ1_POOL=cuj1-pr${_PR_NUMBER}-pool'
-    - 'CUJ1_VPC=cuj1-pr${_PR_NUMBER}-vpc'
-    - 'CUJ1_SUBNET=cuj1-pr${_PR_NUMBER}-subnet'
-    - 'CUJ2_NAME=cuj2-pr${_PR_NUMBER}'
-    - 'CUJ3_NAME=cuj3-pr${_PR_NUMBER}'
-    - 'CUJ3_ENGINE_PREFIX=cuj3_pr${_PR_NUMBER}'
+    - 'EVAL_RUN_ID=pr${_PR_NUMBER}'
 
 # The Cloud Build trigger sets the environment-specific substitutions:
 # _EVAL_SERVER_IMAGE, _TARGET_REGION, _SHARED_CLUSTER, _SHARED_POOL,
