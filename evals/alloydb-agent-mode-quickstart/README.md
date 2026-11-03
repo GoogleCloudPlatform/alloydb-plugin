@@ -9,7 +9,7 @@ skill, powered by [EvalBench](https://github.com/GoogleCloudPlatform/evalbench).
 | Scenario ID | Capability Tested | Description |
 | :--- | :--- | :--- |
 | `cuj1-provision-agent-pool` | Capability 1 (Step P) | Provisions a dedicated VPC, subnet, service connection policy, AlloyDB cluster with `--enable-agent-mode`, primary instance, and `AGENT_POOL` instance over PSC, verifies `READY` + `.alloydb.goog.` DNS name, then performs confirmed reverse-order teardown. |
-| `cuj2-simple-agent` | Capability 2 (Steps 0–4 + Teardown) | Generates and validates `<name>.alloydb-agent.yaml`, provisions per-deployment infrastructure and IAM database user against a shared AlloyDB agent pool, deploys and validates a read-only ADK agent on Vertex AI Agent Engine, then performs confirmed per-deployment teardown while preserving shared resources. |
+| `cuj2-simple-agent` | Capability 2 (Steps 0–4 + Teardown) | Generates and validates `<name>.alloydb-agent.yaml`, provisions per-deployment infrastructure and IAM database user against a shared AlloyDB agent pool, deploys a read-only ADK agent on Vertex AI Agent Engine, validates end-to-end execution, then performs confirmed per-deployment teardown while preserving shared resources. |
 | `cuj3-agent-swarm` | Capability 3 (Steps 0–4 + Teardown) | Deploys a Cloud Run Agent Workspace (`isolation-self-check: PASS`), a worker agent with per-session PostgreSQL scratch databases, and a swarm coordinator on Vertex AI Agent Engine, validates end-to-end execution, then tears down both engines, the stack, and the IAM database user while preserving shared resources. |
 
 ## Triggering from a Pull Request

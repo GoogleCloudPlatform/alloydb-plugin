@@ -33,10 +33,13 @@ runners:
 eval_case_timeout: 120m
 
 scorers:
-  # 1. Skill activation
+  # 1. Skill activation & SKILL.md quality
   skills_trajectory:
     enforce_order: false
     allow_extra_skills: true
+  skills_best_practices:
+    model_config: !ENV "${EVAL_SUITE_DIR}/gemini_3.8_flash_model.yaml"
+    skills_dir: !ENV "${EVAL_SKILLS_DIR:/workspace/skills}"
 
   # 2. Qualitative & rubric LLM judges
   goal_completion:
