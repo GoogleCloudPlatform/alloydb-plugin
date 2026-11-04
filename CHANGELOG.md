@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.1](https://github.com/GoogleCloudPlatform/alloydb-plugin/compare/0.2.0...0.2.1) (2026-11-04)
+
+
+### Features
+
+* **plugin:** migrate from generated skills to the prebuilt MCP server ([#169](https://github.com/GoogleCloudPlatform/alloydb-plugin/issues/169)) ([00ee6ce](https://github.com/GoogleCloudPlatform/alloydb-plugin/commit/00ee6ce2bcf88b46da4bf298a3ad8c0ad85877c8))
+* **plugin:** support agent plugin spec ([#167](https://github.com/GoogleCloudPlatform/alloydb-plugin/issues/167)) ([9521dbb](https://github.com/GoogleCloudPlatform/alloydb-plugin/commit/9521dbb4ea2d2236b36dc58bf58609d57a00a679))
+* **skills:** add alloydb-agent-mode-quickstart skill ([#171](https://github.com/GoogleCloudPlatform/alloydb-plugin/issues/171)) ([67f41ca](https://github.com/GoogleCloudPlatform/alloydb-plugin/commit/67f41ca67cb9a636abe811ca516ef07fc927dde3))
+
+
+### Bug Fixes
+
+* **evals:** migrate judge model to gemini-3.8-flash on global endpoint ([#173](https://github.com/GoogleCloudPlatform/alloydb-plugin/issues/173)) ([9d1cd74](https://github.com/GoogleCloudPlatform/alloydb-plugin/commit/9d1cd7491bc372894c462e02bb86edb410ae256d))
+
 ## [0.2.0](https://github.com/gemini-cli-extensions/alloydb/compare/0.1.11...0.2.0) (2026-04-16)
 
 ### ⚠ BREAKING CHANGES
