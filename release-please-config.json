@@ -28,7 +28,6 @@
       "release-type": "simple",
       "package-name": "alloydb",
       "extra-files": [
-        "README.md",
         {
           "type": "json",
           "path": "gemini-extension.json",
