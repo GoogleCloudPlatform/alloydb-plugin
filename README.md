@@ -82,14 +82,12 @@ For the latest version, check the [releases page][releases].
 
 [releases]: https://github.com/gemini-cli-extensions/alloydb/releases
 
-<!-- {x-release-please-start-version} -->
-
 <details open>
 <summary id="antigravity">Antigravity</summary>
 
 You can use either of these two agents for Antigravity:
-- [Antigravity CLI](https://github.com/google-gemini/gemini-cli) version **v0.2.1** or higher
-- [Antigravity 2.0](https://antigravity.google/product/antigravity-2) version **v0.2.1** or higher.
+- [Antigravity CLI](https://github.com/google-gemini/gemini-cli) version **v1.6.0** or higher
+- [Antigravity 2.0](https://antigravity.google/product/antigravity-2) version **v2.0.0** or higher.
 
 <blockquote>
 💡 <strong>Tip — Migrating from Gemini CLI?</strong><br>
@@ -192,8 +190,6 @@ Beyond harnesses covered by the native install above, compatible clients include
 
 **Set env vars:**
 Set your environment vars as described in the [configuration section](#configuration).
-
-<!-- {x-release-please-end} -->
 
 
 ## Usage Examples
