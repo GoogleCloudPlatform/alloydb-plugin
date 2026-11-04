@@ -13,7 +13,7 @@
 -- limitations under the License.
 
 -- ============================================================================
--- Sample supply chain and inventory dataset: "Summit Trail Supply"
+-- Sample supply chain and inventory dataset: "Cymbal Outdoor Supply"
 -- A wholesale distributor of outdoor gear: 3 distribution centers, 40 SKUs,
 -- 12 suppliers, 80 retail customers, and ~9 months of daily transactions
 -- (2025-11-03 through 2026-07-31) with weekly (Sunday) inventory snapshots.
@@ -86,7 +86,7 @@ CREATE TABLE products (
 );
 COMMENT ON TABLE products IS
     'Item master. lead_time_days / reorder_point / safety_stock are the '
-    'PLANNING PARAMETERS the replenishment system uses — they reflect what '
+    'PLANNING PARAMETERS the replenishment system uses: they reflect what '
     'planners configured, which is not necessarily what suppliers deliver.';
 
 CREATE TABLE customers (
@@ -96,7 +96,7 @@ CREATE TABLE customers (
     city        text NOT NULL,
     state       text NOT NULL
 );
-COMMENT ON TABLE customers IS 'Retailers who buy wholesale from Summit Trail Supply.';
+COMMENT ON TABLE customers IS 'Retailers who buy wholesale from Cymbal Outdoor Supply.';
 
 CREATE TABLE sales_orders (
     order_id          int PRIMARY KEY,
@@ -121,7 +121,7 @@ CREATE TABLE sales_order_lines (
 );
 COMMENT ON TABLE sales_order_lines IS
     'Order lines: the fill-rate ground truth. qty_shipped < qty_ordered is a '
-    'cut line — the unshipped remainder was NOT fulfilled later.';
+    'cut line, where the unshipped remainder was NOT fulfilled later.';
 
 CREATE TABLE purchase_orders (
     po_id       int PRIMARY KEY,
@@ -155,7 +155,7 @@ CREATE TABLE inventory_snapshots (
     PRIMARY KEY (snapshot_date, product_id, dc_id)
 );
 COMMENT ON TABLE inventory_snapshots IS
-    'Weekly (Sunday) end-of-day SYSTEM on-hand per product per DC — what '
+    'Weekly (Sunday) end-of-day SYSTEM on-hand per product per DC: what '
     'the ERP believed, which physical counts may contradict.';
 
 CREATE TABLE demand_forecasts (
@@ -199,142 +199,142 @@ COPY distribution_centers (dc_id, code, name, city, state) FROM stdin;
 3	DFW	Fort Worth Distribution Center	Fort Worth	TX
 \.
 COPY suppliers (supplier_id, name, city, state) FROM stdin;
-1	Cascade Ridge Manufacturing	Bend	OR
-2	Pacific Trail Imports	Tacoma	WA
-3	Ironwood Fabrication	Boise	ID
-4	Bluewater Textiles	Charlotte	NC
-5	Northstar Alloy Works	Duluth	MN
-6	Redwood Plastics Co	Eureka	CA
-7	Keystone Gear Labs	Allentown	PA
-8	Summit Forge Industries	Golden	CO
-9	Lakeshore Composites	Traverse City	MI
-10	Highline Optics	Ogden	UT
-11	Granite Peak Tooling	Barre	VT
-12	Silver Creek Webbing	Chattanooga	TN
+1	Cymbal Cascade Manufacturing	Bend	OR
+2	Cymbal Northwest Imports	Tacoma	WA
+3	Cymbal Sawtooth Fabrication	Boise	ID
+4	Cymbal Piedmont Textiles	Charlotte	NC
+5	Cymbal Northshore Alloy	Duluth	MN
+6	Cymbal Coastline Plastics	Eureka	CA
+7	Cymbal Lehigh Gear Labs	Allentown	PA
+8	Cymbal Front Range Forge	Golden	CO
+9	Cymbal Bayview Composites	Traverse City	MI
+10	Cymbal Wasatch Optics	Ogden	UT
+11	Cymbal Green Mountain Tooling	Barre	VT
+12	Cymbal Riverbend Webbing	Chattanooga	TN
 \.
 COPY products (product_id, sku, name, category, supplier_id, case_pack, unit_cost, list_price, lead_time_days, reorder_point, safety_stock) FROM stdin;
-1	STS-0001	Stonefly Water Bottle Pro	Hydration & Coolers	6	6	6.13	12.49	10	42	25
-2	STS-0002	Cirque Hydration Pack 45qt	Hydration & Coolers	8	6	49.75	104.33	28	133	55
-3	STS-0003	Talus Cooler Pro	Hydration & Coolers	6	12	11.69	26.74	14	97	56
-4	STS-0004	Stonefly Insulated Jug 45qt	Hydration & Coolers	8	12	19.36	37.77	10	128	68
-5	STS-0005	Cirque Flask Pro	Hydration & Coolers	6	24	59.8	111.03	14	268	140
-6	STS-0006	Northfork Dome Tent Lite	Tents & Shelters	1	24	67.34	154.57	14	324	159
-7	STS-0007	Basin Backpacking Tent	Tents & Shelters	1	6	71.64	159.96	14	35	22
-8	STS-0008	Juniper Tarp Shelter Lite	Tents & Shelters	1	6	27.15	49.81	21	74	37
-9	STS-0009	Northfork Bivy	Tents & Shelters	1	24	59.75	129.89	10	254	135
-10	STS-0010	Basin Canopy Lite	Tents & Shelters	1	24	35.91	74.91	10	109	73
-11	STS-0011	Meridian Sleeping Bag 20L	Sleeping Bags & Pads	4	6	86.66	195.04	14	40	24
-12	STS-0012	Ridgeline Sleeping Pad 2P	Sleeping Bags & Pads	9	24	83.73	145.58	10	334	162
-13	STS-0013	Kestrel Camp Quilt 20L	Sleeping Bags & Pads	4	12	55.03	97.54	28	170	82
-14	STS-0014	Meridian Air Mattress 2P	Sleeping Bags & Pads	9	12	68.14	116.19	21	95	55
-15	STS-0015	Ridgeline Liner 20L	Sleeping Bags & Pads	4	12	76.8	170.21	21	162	79
-16	STS-0016	Timberline Daypack 35L	Backpacks & Bags	12	12	86.17	161.56	21	333	126
-17	STS-0017	Alpine Trekking Pack 3P	Backpacks & Bags	4	6	23.66	53.01	10	47	27
-18	STS-0018	Wildwood Duffel 35L	Backpacks & Bags	12	24	39.12	82.83	28	363	171
-19	STS-0019	Timberline Hip Pack 3P	Backpacks & Bags	4	24	68.96	153.58	14	160	98
-20	STS-0020	Alpine Dry Bag 35L	Backpacks & Bags	12	6	39.13	68.61	28	114	50
-21	STS-0021	Cirque Camp Stove 60L	Camp Kitchen	2	24	34.29	59.84	7	135	86
-22	STS-0022	Talus Cook Set XL	Camp Kitchen	7	6	72.84	165.43	14	59	32
-23	STS-0023	Stonefly French Press 60L	Camp Kitchen	2	12	22.74	46.91	7	82	50
-24	STS-0024	Cirque Utensil Kit XL	Camp Kitchen	7	24	18.38	36.72	14	284	146
-25	STS-0025	Talus Grill 60L	Camp Kitchen	2	6	86.3	171.1	7	47	27
-26	STS-0026	Basin Headlamp 1L	Lighting & Electronics	10	6	30.24	55.53	28	182	66
-27	STS-0027	Juniper Lantern Compact	Lighting & Electronics	5	12	10.09	17.24	10	120	65
-28	STS-0028	Northfork Flashlight 1L	Lighting & Electronics	10	12	81.28	176.24	14	72	45
-29	STS-0029	Basin Power Bank Compact	Lighting & Electronics	5	6	27.55	47.33	28	126	53
-30	STS-0030	Juniper Solar Charger 1L	Lighting & Electronics	10	24	83.81	184.29	21	376	175
-31	STS-0031	Ridgeline Trekking Poles 45qt	Trekking & Climbing	5	24	84.17	150.44	28	817	285
-32	STS-0032	Kestrel Carabiner Set Pro	Trekking & Climbing	11	6	65.62	124.18	14	34	22
-33	STS-0033	Meridian Climbing Harness 45qt	Trekking & Climbing	5	6	59.41	117.28	14	77	38
-34	STS-0034	Ridgeline Crampons Pro	Trekking & Climbing	11	12	63.45	134.91	14	56	38
-35	STS-0035	Kestrel Rope Bag 45qt	Trekking & Climbing	5	12	63.79	125.1	10	62	41
-36	STS-0036	Alpine Rain Shell	Rainwear & Accessories	3	24	63.47	119.54	14	144	90
-37	STS-0037	Wildwood Poncho Lite	Rainwear & Accessories	4	24	56.36	129.57	10	393	180
-38	STS-0038	Timberline Gaiters	Rainwear & Accessories	3	12	72.02	155.44	14	181	85
-39	STS-0039	Alpine Pack Cover Lite	Rainwear & Accessories	4	6	14.15	32.52	14	87	42
-40	STS-0040	Wildwood Camp Towel	Rainwear & Accessories	3	6	18.1	38.67	21	60	33
+1	CYM-0001	Cymbal Creekside Water Bottle Pro	Hydration & Coolers	6	6	6.13	12.49	10	42	25
+2	CYM-0002	Cymbal Cirque Hydration Pack 45qt	Hydration & Coolers	8	6	49.75	104.33	28	133	55
+3	CYM-0003	Cymbal Talus Cooler Pro	Hydration & Coolers	6	12	11.69	26.74	14	97	56
+4	CYM-0004	Cymbal Creekside Insulated Jug 45qt	Hydration & Coolers	8	12	19.36	37.77	10	128	68
+5	CYM-0005	Cymbal Cirque Flask Pro	Hydration & Coolers	6	24	59.8	111.03	14	268	140
+6	CYM-0006	Cymbal Northfork Dome Tent Lite	Tents & Shelters	1	24	67.34	154.57	14	324	159
+7	CYM-0007	Cymbal Basin Backpacking Tent	Tents & Shelters	1	6	71.64	159.96	14	35	22
+8	CYM-0008	Cymbal Juniper Tarp Shelter Lite	Tents & Shelters	1	6	27.15	49.81	21	74	37
+9	CYM-0009	Cymbal Northfork Bivy	Tents & Shelters	1	24	59.75	129.89	10	254	135
+10	CYM-0010	Cymbal Basin Canopy Lite	Tents & Shelters	1	24	35.91	74.91	10	109	73
+11	CYM-0011	Cymbal Meridian Sleeping Bag 20L	Sleeping Bags & Pads	4	6	86.66	195.04	14	40	24
+12	CYM-0012	Cymbal Ridgeline Sleeping Pad 2P	Sleeping Bags & Pads	9	24	83.73	145.58	10	334	162
+13	CYM-0013	Cymbal Highland Camp Quilt 20L	Sleeping Bags & Pads	4	12	55.03	97.54	28	170	82
+14	CYM-0014	Cymbal Meridian Air Mattress 2P	Sleeping Bags & Pads	9	12	68.14	116.19	21	95	55
+15	CYM-0015	Cymbal Ridgeline Liner 20L	Sleeping Bags & Pads	4	12	76.8	170.21	21	162	79
+16	CYM-0016	Cymbal Crestline Daypack 35L	Backpacks & Bags	12	12	86.17	161.56	21	333	126
+17	CYM-0017	Cymbal Alpine Trekking Pack 3P	Backpacks & Bags	4	6	23.66	53.01	10	47	27
+18	CYM-0018	Cymbal Wildwood Duffel 35L	Backpacks & Bags	12	24	39.12	82.83	28	363	171
+19	CYM-0019	Cymbal Crestline Hip Pack 3P	Backpacks & Bags	4	24	68.96	153.58	14	160	98
+20	CYM-0020	Cymbal Alpine Dry Bag 35L	Backpacks & Bags	12	6	39.13	68.61	28	114	50
+21	CYM-0021	Cymbal Cirque Camp Stove 60L	Camp Kitchen	2	24	34.29	59.84	7	135	86
+22	CYM-0022	Cymbal Talus Cook Set XL	Camp Kitchen	7	6	72.84	165.43	14	59	32
+23	CYM-0023	Cymbal Creekside French Press 60L	Camp Kitchen	2	12	22.74	46.91	7	82	50
+24	CYM-0024	Cymbal Cirque Utensil Kit XL	Camp Kitchen	7	24	18.38	36.72	14	284	146
+25	CYM-0025	Cymbal Talus Grill 60L	Camp Kitchen	2	6	86.3	171.1	7	47	27
+26	CYM-0026	Cymbal Basin Headlamp 1L	Lighting & Electronics	10	6	30.24	55.53	28	182	66
+27	CYM-0027	Cymbal Juniper Lantern Compact	Lighting & Electronics	5	12	10.09	17.24	10	120	65
+28	CYM-0028	Cymbal Northfork Flashlight 1L	Lighting & Electronics	10	12	81.28	176.24	14	72	45
+29	CYM-0029	Cymbal Basin Power Bank Compact	Lighting & Electronics	5	6	27.55	47.33	28	126	53
+30	CYM-0030	Cymbal Juniper Solar Charger 1L	Lighting & Electronics	10	24	83.81	184.29	21	376	175
+31	CYM-0031	Cymbal Ridgeline Trekking Poles 45qt	Trekking & Climbing	5	24	84.17	150.44	28	817	285
+32	CYM-0032	Cymbal Highland Carabiner Set Pro	Trekking & Climbing	11	6	65.62	124.18	14	34	22
+33	CYM-0033	Cymbal Meridian Climbing Harness 45qt	Trekking & Climbing	5	6	59.41	117.28	14	77	38
+34	CYM-0034	Cymbal Ridgeline Crampons Pro	Trekking & Climbing	11	12	63.45	134.91	14	56	38
+35	CYM-0035	Cymbal Highland Rope Bag 45qt	Trekking & Climbing	5	12	63.79	125.1	10	62	41
+36	CYM-0036	Cymbal Alpine Rain Shell	Rainwear & Accessories	3	24	63.47	119.54	14	144	90
+37	CYM-0037	Cymbal Wildwood Poncho Lite	Rainwear & Accessories	4	24	56.36	129.57	10	393	180
+38	CYM-0038	Cymbal Crestline Gaiters	Rainwear & Accessories	3	12	72.02	155.44	14	181	85
+39	CYM-0039	Cymbal Alpine Pack Cover Lite	Rainwear & Accessories	4	6	14.15	32.52	14	87	42
+40	CYM-0040	Cymbal Wildwood Camp Towel	Rainwear & Accessories	3	6	18.1	38.67	21	60	33
 \.
 COPY customers (customer_id, name, segment, city, state) FROM stdin;
-1	Boulder Outdoor Supply	regional_chain	Boulder	CO
-2	Summit Shop Bozeman	regional_chain	Bozeman	MT
-3	Asheville Outdoor Supply	regional_chain	Asheville	NC
-4	Summit Shop Bend	independent	Bend	OR
-5	Flagstaff Outdoor Supply	independent	Flagstaff	AZ
-6	Summit Shop Burlington	independent	Burlington	VT
-7	Missoula Outdoor Supply	independent	Missoula	MT
-8	Summit Shop Santa Fe	online	Santa Fe	NM
-9	Duluth Outdoor Supply	independent	Duluth	MN
-10	Summit Shop Ithaca	online	Ithaca	NY
-11	Moab Outdoor Supply	independent	Moab	UT
-12	Summit Shop Chattanooga	independent	Chattanooga	TN
-13	Spokane Outdoor Supply	independent	Spokane	WA
-14	Summit Shop Madison	regional_chain	Madison	WI
-15	Knoxville Outdoor Supply	independent	Knoxville	TN
-16	Summit Shop Eugene	independent	Eugene	OR
-17	Fort Collins Outdoor Supply	regional_chain	Fort Collins	CO
-18	Summit Shop Ann Arbor	independent	Ann Arbor	MI
-19	Boise Outdoor Supply	independent	Boise	ID
-20	Summit Shop Asheville	independent	Asheville	NC
-21	Boulder Outdoor Supply #21	independent	Boulder	CO
-22	Summit Shop Bozeman #22	independent	Bozeman	MT
-23	Asheville Outdoor Supply #23	regional_chain	Asheville	NC
-24	Summit Shop Bend #24	independent	Bend	OR
-25	Flagstaff Outdoor Supply #25	independent	Flagstaff	AZ
-26	Summit Shop Burlington #26	online	Burlington	VT
-27	Missoula Outdoor Supply #27	independent	Missoula	MT
-28	Summit Shop Santa Fe #28	regional_chain	Santa Fe	NM
-29	Duluth Outdoor Supply #29	independent	Duluth	MN
-30	Summit Shop Ithaca #30	online	Ithaca	NY
-31	Moab Outdoor Supply #31	regional_chain	Moab	UT
-32	Summit Shop Chattanooga #32	independent	Chattanooga	TN
-33	Spokane Outdoor Supply #33	regional_chain	Spokane	WA
-34	Summit Shop Madison #34	online	Madison	WI
-35	Knoxville Outdoor Supply #35	online	Knoxville	TN
-36	Summit Shop Eugene #36	independent	Eugene	OR
-37	Fort Collins Outdoor Supply #37	independent	Fort Collins	CO
-38	Summit Shop Ann Arbor #38	independent	Ann Arbor	MI
-39	Boise Outdoor Supply #39	regional_chain	Boise	ID
-40	Summit Shop Asheville #40	independent	Asheville	NC
-41	Boulder Outdoor Supply #41	independent	Boulder	CO
-42	Summit Shop Bozeman #42	independent	Bozeman	MT
-43	Asheville Outdoor Supply #43	regional_chain	Asheville	NC
-44	Summit Shop Bend #44	independent	Bend	OR
-45	Flagstaff Outdoor Supply #45	independent	Flagstaff	AZ
-46	Summit Shop Burlington #46	independent	Burlington	VT
-47	Missoula Outdoor Supply #47	online	Missoula	MT
-48	Summit Shop Santa Fe #48	regional_chain	Santa Fe	NM
-49	Duluth Outdoor Supply #49	regional_chain	Duluth	MN
-50	Summit Shop Ithaca #50	regional_chain	Ithaca	NY
-51	Moab Outdoor Supply #51	independent	Moab	UT
-52	Summit Shop Chattanooga #52	independent	Chattanooga	TN
-53	Spokane Outdoor Supply #53	independent	Spokane	WA
-54	Summit Shop Madison #54	online	Madison	WI
-55	Knoxville Outdoor Supply #55	independent	Knoxville	TN
-56	Summit Shop Eugene #56	online	Eugene	OR
-57	Fort Collins Outdoor Supply #57	independent	Fort Collins	CO
-58	Summit Shop Ann Arbor #58	regional_chain	Ann Arbor	MI
-59	Boise Outdoor Supply #59	independent	Boise	ID
-60	Summit Shop Asheville #60	independent	Asheville	NC
-61	Boulder Outdoor Supply #61	independent	Boulder	CO
-62	Summit Shop Bozeman #62	independent	Bozeman	MT
-63	Asheville Outdoor Supply #63	online	Asheville	NC
-64	Summit Shop Bend #64	regional_chain	Bend	OR
-65	Flagstaff Outdoor Supply #65	regional_chain	Flagstaff	AZ
-66	Summit Shop Burlington #66	independent	Burlington	VT
-67	Missoula Outdoor Supply #67	online	Missoula	MT
-68	Summit Shop Santa Fe #68	online	Santa Fe	NM
-69	Duluth Outdoor Supply #69	regional_chain	Duluth	MN
-70	Summit Shop Ithaca #70	online	Ithaca	NY
-71	Moab Outdoor Supply #71	independent	Moab	UT
-72	Summit Shop Chattanooga #72	online	Chattanooga	TN
-73	Spokane Outdoor Supply #73	independent	Spokane	WA
-74	Summit Shop Madison #74	online	Madison	WI
-75	Knoxville Outdoor Supply #75	independent	Knoxville	TN
-76	Summit Shop Eugene #76	independent	Eugene	OR
-77	Fort Collins Outdoor Supply #77	independent	Fort Collins	CO
-78	Summit Shop Ann Arbor #78	independent	Ann Arbor	MI
-79	Boise Outdoor Supply #79	independent	Boise	ID
-80	Summit Shop Asheville #80	regional_chain	Asheville	NC
+1	Cymbal Outdoor Boulder	regional_chain	Boulder	CO
+2	Cymbal Shops Bozeman	regional_chain	Bozeman	MT
+3	Cymbal Outdoor Asheville	regional_chain	Asheville	NC
+4	Cymbal Shops Bend	independent	Bend	OR
+5	Cymbal Outdoor Flagstaff	independent	Flagstaff	AZ
+6	Cymbal Shops Burlington	independent	Burlington	VT
+7	Cymbal Outdoor Missoula	independent	Missoula	MT
+8	Cymbal Shops Santa Fe	online	Santa Fe	NM
+9	Cymbal Outdoor Duluth	independent	Duluth	MN
+10	Cymbal Shops Ithaca	online	Ithaca	NY
+11	Cymbal Outdoor Moab	independent	Moab	UT
+12	Cymbal Shops Chattanooga	independent	Chattanooga	TN
+13	Cymbal Outdoor Spokane	independent	Spokane	WA
+14	Cymbal Shops Madison	regional_chain	Madison	WI
+15	Cymbal Outdoor Knoxville	independent	Knoxville	TN
+16	Cymbal Shops Eugene	independent	Eugene	OR
+17	Cymbal Outdoor Fort Collins	regional_chain	Fort Collins	CO
+18	Cymbal Shops Ann Arbor	independent	Ann Arbor	MI
+19	Cymbal Outdoor Boise	independent	Boise	ID
+20	Cymbal Shops Asheville	independent	Asheville	NC
+21	Cymbal Outdoor Boulder #21	independent	Boulder	CO
+22	Cymbal Shops Bozeman #22	independent	Bozeman	MT
+23	Cymbal Outdoor Asheville #23	regional_chain	Asheville	NC
+24	Cymbal Shops Bend #24	independent	Bend	OR
+25	Cymbal Outdoor Flagstaff #25	independent	Flagstaff	AZ
+26	Cymbal Shops Burlington #26	online	Burlington	VT
+27	Cymbal Outdoor Missoula #27	independent	Missoula	MT
+28	Cymbal Shops Santa Fe #28	regional_chain	Santa Fe	NM
+29	Cymbal Outdoor Duluth #29	independent	Duluth	MN
+30	Cymbal Shops Ithaca #30	online	Ithaca	NY
+31	Cymbal Outdoor Moab #31	regional_chain	Moab	UT
+32	Cymbal Shops Chattanooga #32	independent	Chattanooga	TN
+33	Cymbal Outdoor Spokane #33	regional_chain	Spokane	WA
+34	Cymbal Shops Madison #34	online	Madison	WI
+35	Cymbal Outdoor Knoxville #35	online	Knoxville	TN
+36	Cymbal Shops Eugene #36	independent	Eugene	OR
+37	Cymbal Outdoor Fort Collins #37	independent	Fort Collins	CO
+38	Cymbal Shops Ann Arbor #38	independent	Ann Arbor	MI
+39	Cymbal Outdoor Boise #39	regional_chain	Boise	ID
+40	Cymbal Shops Asheville #40	independent	Asheville	NC
+41	Cymbal Outdoor Boulder #41	independent	Boulder	CO
+42	Cymbal Shops Bozeman #42	independent	Bozeman	MT
+43	Cymbal Outdoor Asheville #43	regional_chain	Asheville	NC
+44	Cymbal Shops Bend #44	independent	Bend	OR
+45	Cymbal Outdoor Flagstaff #45	independent	Flagstaff	AZ
+46	Cymbal Shops Burlington #46	independent	Burlington	VT
+47	Cymbal Outdoor Missoula #47	online	Missoula	MT
+48	Cymbal Shops Santa Fe #48	regional_chain	Santa Fe	NM
+49	Cymbal Outdoor Duluth #49	regional_chain	Duluth	MN
+50	Cymbal Shops Ithaca #50	regional_chain	Ithaca	NY
+51	Cymbal Outdoor Moab #51	independent	Moab	UT
+52	Cymbal Shops Chattanooga #52	independent	Chattanooga	TN
+53	Cymbal Outdoor Spokane #53	independent	Spokane	WA
+54	Cymbal Shops Madison #54	online	Madison	WI
+55	Cymbal Outdoor Knoxville #55	independent	Knoxville	TN
+56	Cymbal Shops Eugene #56	online	Eugene	OR
+57	Cymbal Outdoor Fort Collins #57	independent	Fort Collins	CO
+58	Cymbal Shops Ann Arbor #58	regional_chain	Ann Arbor	MI
+59	Cymbal Outdoor Boise #59	independent	Boise	ID
+60	Cymbal Shops Asheville #60	independent	Asheville	NC
+61	Cymbal Outdoor Boulder #61	independent	Boulder	CO
+62	Cymbal Shops Bozeman #62	independent	Bozeman	MT
+63	Cymbal Outdoor Asheville #63	online	Asheville	NC
+64	Cymbal Shops Bend #64	regional_chain	Bend	OR
+65	Cymbal Outdoor Flagstaff #65	regional_chain	Flagstaff	AZ
+66	Cymbal Shops Burlington #66	independent	Burlington	VT
+67	Cymbal Outdoor Missoula #67	online	Missoula	MT
+68	Cymbal Shops Santa Fe #68	online	Santa Fe	NM
+69	Cymbal Outdoor Duluth #69	regional_chain	Duluth	MN
+70	Cymbal Shops Ithaca #70	online	Ithaca	NY
+71	Cymbal Outdoor Moab #71	independent	Moab	UT
+72	Cymbal Shops Chattanooga #72	online	Chattanooga	TN
+73	Cymbal Outdoor Spokane #73	independent	Spokane	WA
+74	Cymbal Shops Madison #74	online	Madison	WI
+75	Cymbal Outdoor Knoxville #75	independent	Knoxville	TN
+76	Cymbal Shops Eugene #76	independent	Eugene	OR
+77	Cymbal Outdoor Fort Collins #77	independent	Fort Collins	CO
+78	Cymbal Shops Ann Arbor #78	independent	Ann Arbor	MI
+79	Cymbal Outdoor Boise #79	independent	Boise	ID
+80	Cymbal Shops Asheville #80	regional_chain	Asheville	NC
 \.
 COPY sales_orders (order_id, customer_id, dc_id, order_date, promised_ship_date, status) FROM stdin;
 1	42	1	2025-11-03	2025-11-05	shipped
