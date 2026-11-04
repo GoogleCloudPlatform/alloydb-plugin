@@ -1,4 +1,4 @@
 mcp==2.2.0
-psycopg[binary]==3.3.6
+psycopg[binary]==3.3.8
 uvicorn==0.54.0
 starlette==1.10.0
