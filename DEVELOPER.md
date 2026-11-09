@@ -96,8 +96,8 @@ required.
 The primary maintainers for this repository are defined in the
 [`.github/CODEOWNERS`](.github/CODEOWNERS) file:
 
-* `@gemini-cli-extensions/senseai-eco`
-* `@gemini-cli-extensions/alloydb-maintainers`
+* `@GoogleCloudPlatform/senseai-eco`
+* `@GoogleCloudPlatform/alloydb-plugin-maintainers`
 
 ### Releasing
 
