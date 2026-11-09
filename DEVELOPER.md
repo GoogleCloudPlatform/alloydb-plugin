@@ -21,7 +21,7 @@ The development process involves generating the skills from the `toolbox` prebui
 1.  **Clone the Repository:**
 
     ```bash
-    git clone https://github.com/gemini-cli-extensions/alloydb.git
+    git clone https://github.com/GoogleCloudPlatform/alloydb-plugin.git
     cd alloydb
     ```
 

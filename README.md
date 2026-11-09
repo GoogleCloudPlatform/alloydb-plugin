@@ -80,7 +80,7 @@ To start interacting with your database, install the extension for your preferre
 
 For the latest version, check the [releases page][releases].
 
-[releases]: https://github.com/gemini-cli-extensions/alloydb/releases
+[releases]: https://github.com/GoogleCloudPlatform/alloydb-plugin/releases
 
 <details open>
 <summary id="antigravity">Antigravity</summary>
@@ -108,7 +108,7 @@ See <a href="https://antigravity.google/docs/gcli-migration">Migrating from Gemi
 Install the plugin directly from the remote GitHub repository:
 
 ```bash
-agy plugin install https://github.com/gemini-cli-extensions/alloydb
+agy plugin install https://github.com/GoogleCloudPlatform/alloydb-plugin
 ```
 
 **2. Set env vars:**
@@ -123,7 +123,7 @@ You can install plugins directly from a remote GitHub repository.
 **1. Install the plugin:**
 
 ```bash
-agy plugin install https://github.com/gemini-cli-extensions/alloydb
+agy plugin install https://github.com/GoogleCloudPlatform/alloydb-plugin
 ```
 
 **2. Set env vars:**
@@ -183,7 +183,7 @@ codex plugin marketplace upgrade data-cloud-plugins
 This repository is a valid [Agent Plugins](https://github.com/agentplugins/agent-plugins-spec) (v1) plugin. Any [Agent Plugins–compatible client](https://agent-plugins.org/compatible-clients) can install it directly using its own built-in plugin command — no extra tooling required — by pointing at this repository:
 
 ```
-https://github.com/gemini-cli-extensions/alloydb
+https://github.com/GoogleCloudPlatform/alloydb-plugin
 ```
 
 Beyond harnesses covered by the native install above, compatible clients include VS Code, Cursor, GitHub Copilot, and Kiro. See your agent's documentation for its exact install command.
@@ -260,7 +260,7 @@ in the MCP Toolbox repository.
 ## Additional Agent Skills
 
 Find additional skills to support your entire software development lifecycle at [github.com/gemini-cli-extensions](https://github.com/gemini-cli-extensions), including:
-* [Generic PostgreSQL extension](https://github.com/gemini-cli-extensions/postgres)
+* [Generic PostgreSQL extension](https://github.com/GoogleCloudPlatform/postgres-plugin)
 * [AlloyDB Observability extension](https://github.com/gemini-cli-extensions/alloydb-observability)
 
 ## Troubleshooting

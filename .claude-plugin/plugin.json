@@ -7,7 +7,7 @@
     "email": "data-cloud-ai-integrations@google.com"
   },
   "homepage": "https://cloud.google.com/alloydb",
-  "repository": "https://github.com/gemini-cli-extensions/alloydb",
+  "repository": "https://github.com/GoogleCloudPlatform/alloydb-plugin",
   "license": "Apache-2.0",
   "skills": "./skills/",
   "userConfig": {
