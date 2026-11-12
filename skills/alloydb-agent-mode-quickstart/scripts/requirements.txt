@@ -6,7 +6,7 @@
 # mcp 2.x is required: the AlloyDB Agent Pool returns `structuredContent` as a
 # top-level array (SEP-2106), which 1.x rejects. httpx2 is MCP 2.x's HTTP
 # library.
-google-cloud-aiplatform[adk,agent_engines]==2.8.0
+google-cloud-aiplatform[adk,agent_engines]==2.9.0
 google-adk==2.11.0
 pydantic==2.13.5
 httpx2==2.13.0
