@@ -7,20 +7,19 @@ description: >-
   the user asks to spin up a quick prototype, build a proof of concept (POC),
   try out a feature in a sandbox, or set up a development or staging AlloyDB
   database while minimizing compute costs or avoiding an always-on cluster.
-  Don't use for production workloads requiring REGIONAL failover, read pools,
-  continuous backup or point-in-time recovery, CMEK, VPC peering, instances
-  over 2 vCPUs, storage over 20 GB, inspecting existing clusters or instances,
-  or querying and indexing tables.
+  Don't use for production workloads requiring REGIONAL availability type, read
+  pools, continuous backup or point-in-time recovery, CMEK, VPC peering,
+  instances over 2 vCPUs, storage over 20 GB, inspecting existing clusters or
+  instances, or querying and indexing tables.
 metadata:
   lifecycle: preview
 ---
 
 # AlloyDB Express: Rapid Non-Production Bootstrapping
 
-AlloyDB Express provisions fast-starting, non-production AlloyDB for PostgreSQL
-clusters in seconds (`1` vCPU, `4 GB` RAM, compute scale-to-zero after 15
-minutes idle). Replace `{project_id}`, `{region}`, `{cluster_id}`, and
-`{instance_id}` with the user's identifiers.
+Fast-starting, non-production AlloyDB for PostgreSQL (`1` vCPU, `4 GB` RAM,
+scale-to-zero after 15 minutes idle). Substitute `{project_id}`, `{region}`,
+`{cluster_id}`, and `{instance_id}` with user identifiers.
 
 ## 1. Prerequisites & Limits
 
@@ -28,8 +27,8 @@ Item                  | AlloyDB Express Requirement
 --------------------- | ---------------------------
 Supported regions     | `us-west1`, `europe-west2`, `asia-east1`, `asia-east2`, `asia-northeast1`, `asia-southeast1`, `australia-southeast1`
 PostgreSQL version    | `POSTGRES_18` (PostgreSQL 18) only
-Creation machine size | `1` vCPU (`4 GB` RAM) at initial primary creation
-Availability type     | `ZONAL` only (`REGIONAL` failover and read pools unsupported)
+Initial machine size  | `1` vCPU (`4 GB` RAM) at creation
+Availability type     | `ZONAL` only (`REGIONAL` availability type and read pools unsupported)
 Storage & connections | Up to 20 GB storage; `max_connections` fixed at `200`
 Networking            | Private Service Connect (PSC) and/or Public DNS; no VPC peering
 
@@ -40,29 +39,32 @@ Networking            | Private Service Connect (PSC) and/or Public DNS; no VPC 
     (skip pre-listing clusters or web searches). Default to IAM database
     authentication by omitting an initial `postgres` password. Never ask for,
     generate, or read plaintext passwords in prompts or environment variables;
-    if a user explicitly wants a `postgres` password via CLI, output the command
-    with a placeholder for their terminal and resume at Step 2. **Wait for
-    cluster creation to finish** before creating the primary instance.
+    if a user explicitly wants to create a cluster with an initial postgres user
+    password, then output the command to do so with a placeholder for password
+    and instruct them to fill in the placeholder and run the command in their
+    terminal, then resume at Step 2. **Wait for cluster creation to finish**
+    before creating the primary instance.
 -   [ ] **Step 2 - Create the 1-vCPU Zonal Primary Instance**: Provision
     `{instance_id}` in `{cluster_id}` as a `1`-vCPU `ZONAL` `PRIMARY` instance
-    (no `2+` vCPUs, `REGIONAL` availability, dedicated machine types, or raw
-    IPv4 Public IP). PSC is enabled on the cluster by default and Public DNS is
-    off unless requested:
+    (no `2+` vCPUs, `REGIONAL` availability type, dedicated machine types, or
+    raw IPv4 Public IP). PSC is enabled on the cluster by default and Public DNS
+    is off unless requested:
 
     -   **Public DNS only**: Enable Public DNS for external/local access outside
-        a VPC. Public DNS rejects direct client IPs by default: allowlist
-        user-specified IPv4 CIDRs (`{cidr_range}`, never `0.0.0.0/0`) for direct
-        clients, or connect via AlloyDB Auth Proxy / Language Connectors without
-        allowlisting CIDRs.
-    -   **PSC only**: Leave Public DNS off and allowlist consumer project IDs
-        (`{allowed_project_id}`).
-    -   **Both Public DNS and PSC**: Enable Public DNS (plus any direct-client
-        CIDRs) and allowlist consumer project IDs.
+        a VPC. Public DNS rejects direct client IPs by default: allowlist only
+        user-specified IPv4 CIDRs upon explicit request (`{cidr_range}`, never
+        `0.0.0.0/0`) for direct clients, or connect via AlloyDB Auth Proxy /
+        Language Connectors without allowlisting CIDRs.
+    -   **PSC only**: Leave Public DNS off and allowlist only explicitly
+        requested consumer project IDs (`{allowed_project_id}`).
+    -   **Both Public DNS and PSC**: Enable Public DNS and allowlist only
+        explicitly requested IPv4 CIDRs (`{cidr_range}`, never `0.0.0.0/0`) or
+        consumer project IDs.
 
-    If public/local vs. private VPC access (or required PSC project IDs /
-    direct-client CIDRs) is unspecified, ask first (for local/public access
-    without a CIDR, enable Public DNS with no open CIDRs). **Wait for instance
-    creation to finish** before reading attributes.
+    If connectivity (or required PSC projects / direct-client CIDRs) is
+    unspecified, ask first (for local/public access without a CIDR, enable
+    Public DNS with no open CIDRs). **Wait for instance creation** before
+    reading attributes.
 -   [ ] **Step 3 - Report Created Resource Attributes**: Read cluster and
     instance metadata and report:
 
@@ -75,18 +77,16 @@ Networking            | Private Service Connect (PSC) and/or Public DNS; no VPC 
 
 -   **`only cpu_count of 1 is supported`**: Initial primary creation supports
     `1` vCPU only.
--   **Dedicated machine types or `REGIONAL` availability rejected**: Use `1`
-    vCPU and `ZONAL` availability instead of machine type strings (eg
-    `n2-highmem-2`) or `REGIONAL`.
+-   **Dedicated machine types or `REGIONAL` rejected**: Use `1` vCPU and `ZONAL`
+    instead of machine types (eg `n2-highmem-2`) or `REGIONAL`.
 -   **Raw IPv4 Public IP rejected**: Use **Public DNS** and/or **PSC** instead.
--   **Direct Public DNS connections rejected**: Allowlist user-specified IPv4
-    CIDRs (updates overwrite the full list; `0.0.0.0/0` disallowed), or use Auth
-    Proxy (`--public-ip`) / Language Connectors.
--   **`password complexity is not met`**: Manual passwords require `8+` chars
-    with uppercase, lowercase, digit, and `!`, `@`, `#`, `$`.
--   **Extended triage & scaling**: Read
+-   **Direct Public DNS connections rejected**: Allowlist only user-specified
+    IPv4 CIDRs upon explicit request (updates overwrite the full list;
+    `0.0.0.0/0` disallowed), or use Auth Proxy (`--public-ip`) / Language
+    Connectors.
+-   **Triage & scaling**: Read
     [references/troubleshooting.md](references/troubleshooting.md) only on
-    creation errors or post-creation scaling questions.
+    creation errors or scaling questions.
 
 ## Tooling (Optional)
 
@@ -99,11 +99,11 @@ Networking            | Private Service Connect (PSC) and/or Public DNS; no VPC 
         {"parent": "projects/{project_id}/locations/{region}", "clusterId": "{cluster_id}", "expressConfig": {"enabled": true}}
         ```
 
-    2.  Call `alloydb:create_instance` with connectivity matching Step 2
-        (`"publicDnsEnabled": true` for Public DNS, `"pscInstanceConfig":
-        {"allowedConsumerProjects": ["{allowed_project_id}"]}` for PSC, or both;
-        add `"authorizedExternalNetworks": ["{cidr_range}"]` for direct-client
-        CIDRs on Public DNS), poll `alloydb:get_operation` until `"done": true`,
+    2.  Call `alloydb:create_instance` matching Step 2
+        (`"publicDnsEnabled": true`, `"pscInstanceConfig":
+        {"allowedConsumerProjects": ["{allowed_project_id}"]}`, or both; add
+        `"authorizedExternalNetworks": ["{cidr_range}"]` for explicit
+        direct-client CIDRs), poll `alloydb:get_operation` until `"done": true`,
         and read `machineConfig.cpuCount`, `availabilityType`, and
         `networkInfo.publicDnsName`:
 
@@ -112,13 +112,14 @@ Networking            | Private Service Connect (PSC) and/or Public DNS; no VPC 
         ```
 
 -   **Without MCP (`v1beta` REST + `gcloud beta alloydb` CLI)**: Create an
-    IAM-only Express cluster via `v1beta` REST (if the user wants a `postgres`
-    password, output `gcloud beta alloydb clusters create {cluster_id}
-    --region={region} --project={project_id} --enable-express
-    --password='<YOUR_PASSWORD>'` for their terminal), poll `clusters describe`
-    until `"state": "READY"`, then create (omit `--async`; add
-    `--authorized-external-networks={cidr_range}` for direct-client CIDRs) and
-    describe the instance:
+    IAM-only Express cluster via `v1beta` REST (if the user wants an initial
+    `postgres` user password, output `gcloud beta alloydb clusters create
+    {cluster_id} --region={region} --project={project_id} --enable-express
+    --password='<YOUR_PASSWORD>'` to their terminal and instruct them to fill in
+    the placeholder and run it), poll `clusters describe` until
+    `"state": "READY"`, then create (omit `--async`; add
+    `--authorized-external-networks={cidr_range}` for explicit direct-client
+    CIDRs) and describe the instance:
 
     ```bash
     curl -sS --proto-default https -X POST \
