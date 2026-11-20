@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.2](https://github.com/GoogleCloudPlatform/alloydb-plugin/compare/0.2.1...0.2.2) (2026-11-20)
+
+
+### Features
+
+* **skills:** add alloydb-express skill ([577c76e](https://github.com/GoogleCloudPlatform/alloydb-plugin/commit/577c76eef2b2c2e36d8f8cd35df231954b3f9a5a))
+
+
+### Bug Fixes
+
+* Dedupe and add URLs to .lycheeignore to fix Github throttling on lint checks. ([f4f1bc4](https://github.com/GoogleCloudPlatform/alloydb-plugin/commit/f4f1bc4af277d16008669477cd3a46da86100955))
+* Make authorized-external-networks instructions more explicit. ([7b289b7](https://github.com/GoogleCloudPlatform/alloydb-plugin/commit/7b289b78de20394e654775d6d1168188a8b58b32))
+
 ## [0.2.1](https://github.com/GoogleCloudPlatform/alloydb-plugin/compare/0.2.0...0.2.1) (2026-11-04)
 
 
