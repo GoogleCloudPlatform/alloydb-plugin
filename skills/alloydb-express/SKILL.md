@@ -102,10 +102,10 @@ Networking            | Private Service Connect (PSC) and/or Public DNS; no VPC 
     2.  Call `alloydb:create_instance` matching Step 2
         (`"publicDnsEnabled": true`, `"pscInstanceConfig":
         {"allowedConsumerProjects": ["{allowed_project_id}"]}`, or both; add
-        `"authorizedExternalNetworks": ["{cidr_range}"]` for explicit
-        direct-client CIDRs), poll `alloydb:get_operation` until `"done": true`,
-        and read `machineConfig.cpuCount`, `availabilityType`, and
-        `networkInfo.publicDnsName`:
+        `"authorizedExternalNetworks": ["{cidr_range}"]` only for direct-client
+        CIDRs explicitly provided by the user), poll `alloydb:get_operation`
+        until `"done": true`, and read `machineConfig.cpuCount`,
+        `availabilityType`, and `networkInfo.publicDnsName`:
 
         ```json
         {"parent": "projects/{project_id}/locations/{region}/clusters/{cluster_id}", "instanceId": "{instance_id}", "type": "PRIMARY", "cpuCount": 1, "publicDnsEnabled": true}
@@ -118,8 +118,8 @@ Networking            | Private Service Connect (PSC) and/or Public DNS; no VPC 
     --password='<YOUR_PASSWORD>'` to their terminal and instruct them to fill in
     the placeholder and run it), poll `clusters describe` until
     `"state": "READY"`, then create (omit `--async`; add
-    `--authorized-external-networks={cidr_range}` for explicit direct-client
-    CIDRs) and describe the instance:
+    `--authorized-external-networks={cidr_range}` only for direct-client CIDRs
+    explicitly provided by the user) and describe the instance:
 
     ```bash
     curl -sS --proto-default https -X POST \
