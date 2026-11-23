@@ -27,14 +27,14 @@ Item                  | AlloyDB Express Requirement
 --------------------- | ---------------------------
 Supported regions     | `us-west1`, `europe-west2`, `asia-east1`, `asia-east2`, `asia-northeast1`, `asia-southeast1`, `australia-southeast1`
 PostgreSQL version    | `POSTGRES_18` (PostgreSQL 18) only
-Initial machine size  | `1` vCPU (`4 GB` RAM) at creation
+Initial machine size  | `1` vCPU (`4 GB` RAM)
 Availability type     | `ZONAL` only (`REGIONAL` availability type and read pools unsupported)
-Storage & connections | Up to 20 GB storage; `max_connections` fixed at `200`
+Storage & connections | Up to 20 GB; `max_connections`: `200`
 Networking            | Private Service Connect (PSC) and/or Public DNS; no VPC peering
 
 ## 2. Core Provisioning Workflow
 
--   [ ] **Step 1 - Create the AlloyDB Express Cluster (IAM-Only Default)**:
+-   [ ] **Step 1 - Create AlloyDB Express Cluster (IAM-Only Default)**:
     Provision `{cluster_id}` in `{project_id}` / `{region}` with Express enabled
     (skip pre-listing clusters or web searches). Default to IAM database
     authentication by omitting an initial `postgres` password. Never ask for,
@@ -42,9 +42,9 @@ Networking            | Private Service Connect (PSC) and/or Public DNS; no VPC 
     if a user explicitly wants to create a cluster with an initial postgres user
     password, then output the command to do so with a placeholder for password
     and instruct them to fill in the placeholder and run the command in their
-    terminal, then resume at Step 2. **Wait for cluster creation to finish**
-    before creating the primary instance.
--   [ ] **Step 2 - Create the 1-vCPU Zonal Primary Instance**: Provision
+    terminal, then resume at Step 2. **Wait for cluster creation** before
+    creating the primary instance.
+-   [ ] **Step 2 - Create 1-vCPU Zonal Primary Instance**: Provision
     `{instance_id}` in `{cluster_id}` as a `1`-vCPU `ZONAL` `PRIMARY` instance
     (no `2+` vCPUs, `REGIONAL` availability type, dedicated machine types, or
     raw IPv4 Public IP). PSC is enabled on the cluster by default and Public DNS
@@ -79,7 +79,7 @@ Networking            | Private Service Connect (PSC) and/or Public DNS; no VPC 
     `1` vCPU only.
 -   **Dedicated machine types or `REGIONAL` rejected**: Use `1` vCPU and `ZONAL`
     instead of machine types (eg `n2-highmem-2`) or `REGIONAL`.
--   **Raw IPv4 Public IP rejected**: Use **Public DNS** and/or **PSC** instead.
+-   **Raw IPv4 Public IP rejected**: Use **Public DNS** and/or **PSC**.
 -   **Direct Public DNS connections rejected**: Allowlist only user-specified
     IPv4 CIDRs upon explicit request (updates overwrite the full list;
     `0.0.0.0/0` disallowed), or use Auth Proxy (`--public-ip`) / Language
